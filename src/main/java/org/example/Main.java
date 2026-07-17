@@ -1,5 +1,8 @@
 package org.example;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class Main {
@@ -8,8 +11,8 @@ public class Main {
             System.out.println(item.getId());
         }
     }
-    public static void main(String[] args) {
-        CrudRepository<Car> cars = new InMemoryRepository<>(Car.class,6);
+    public static void main(String[] args) throws InterruptedException {
+        CrudRepository<Car> cars = new InMemoryRepository<>(Car.class,1000);
         GarageService garage = new GarageService(cars);
         InMemoryRepository<Owner> owners = new InMemoryRepository<>(Owner.class,10);
         try {
@@ -45,6 +48,19 @@ public class Main {
         System.out.println("Число машин: "+ garage.stats().count());
     printIds(cars.findAll());
     printIds(owners.findAll());
+        ExecutorService pool = Executors.newFixedThreadPool(8);
+        for (int i = 0; i < 1000; i++) {
+            int n = i;                              // лямбда захватывает только effectively final
+            pool.submit(() -> {
+                try {
+                    garage.addCar(new Car("Brand" + n, "Model" + n, "ENG", 200 + n % 100, 2000));
+                } catch (StorageFullException e) {
+                    System.out.println(e.getMessage());
+                }
+            });
+        }
+        pool.shutdown();
+        pool.awaitTermination(1, TimeUnit.MINUTES);
     Car defaultCar = cars.findById(1L).orElseThrow(() -> new EntityNotFoundException("Нет такой машины с id 1"));
     cars.findById(999L).ifPresent(c -> System.out.println("Нашли " + c));
     Car withDefault = cars.findById(999L).orElse(defaultCar);
@@ -96,7 +112,8 @@ public class Main {
         System.out.println(garage.findBy(c -> c.getBrand().equals("Toyota")));
         System.out.println(garage.findBy(c -> c.getHorsePower() > 280));
         System.out.println(garage.findBy(c -> c.getEngineCode().equals("2JZ-GTE")));
-
+        System.out.println(garage.stats().count());
+        System.out.println(cars.getLastId());
     }
 
 

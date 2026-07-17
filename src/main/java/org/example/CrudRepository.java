@@ -8,5 +8,6 @@ public interface CrudRepository<T extends Identifiable>  {
     Optional<T> findById(Long id);
     List<T> findAll();
     boolean deleteById(Long id);
+    Long getLastId();
 
 }

@@ -39,4 +39,8 @@ public class InMemoryRepository<T extends Identifiable> implements CrudRepositor
     }
     @Override
     public Optional<T> findById(Long id) { return Optional.ofNullable(storage.get(id));}
+    public Long getLastId()
+    {
+        return lastId;
+    }
 }
