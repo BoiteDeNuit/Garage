@@ -118,8 +118,8 @@ public class Main {
         System.out.println(garage.findBy(c -> c.getEngineCode().equals("2JZ-GTE")));
         System.out.println(garage.stats().count());
         System.out.println(cars.getLastId());
-        try {
-            ExecutorService statsPool = Executors.newFixedThreadPool(2);
+        try(ExecutorService statsPool = Executors.newFixedThreadPool(2);){
+
             Future<Double> avgFuture = statsPool.submit(() -> garage.stats().averageHp());
             System.out.println("Среднее из другого потока: " + avgFuture.get());
             statsPool.shutdown();
