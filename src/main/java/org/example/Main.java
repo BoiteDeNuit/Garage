@@ -35,13 +35,6 @@ public class Main {
             System.out.println(e.getMessage());
         }
         System.out.println("Число машин: "+ garage.stats().count());
-        try {
-            cars.save(new Car("Toyota", "Mark4I", "SR20DET", 280, 1999));
-        }
-        catch (StorageFullException e)
-        {
-            System.out.println(e.getMessage());
-        }
 
             boolean deleted = cars.deleteById(3L);
             System.out.println("Машина Удалена: " + (deleted ? "Удалена" : "Не было такой"));

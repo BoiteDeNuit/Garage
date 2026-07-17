@@ -1,12 +1,14 @@
 package org.example;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class InMemoryRepository<T extends Identifiable> implements CrudRepository<T> {
-    private final Map<Long,T> storage = new HashMap<>();
+    private final Map<Long,T> storage = new ConcurrentHashMap<>();
     private final Class<T> type;
     private final int maxSize;
-    private long lastId;
+    private AtomicLong lastId = new AtomicLong();
     public InMemoryRepository(Class<T> type,int maxSize)
     {
         this.type = type;
@@ -21,8 +23,7 @@ public class InMemoryRepository<T extends Identifiable> implements CrudRepositor
         }
         if(entity.getId() == null)
         {
-            lastId++;
-            entity.setId(lastId);
+            entity.setId(lastId.incrementAndGet());
         }
         storage.put(entity.getId(), entity);
         return entity;
@@ -41,6 +42,6 @@ public class InMemoryRepository<T extends Identifiable> implements CrudRepositor
     public Optional<T> findById(Long id) { return Optional.ofNullable(storage.get(id));}
     public Long getLastId()
     {
-        return lastId;
+        return lastId.get();
     }
 }
