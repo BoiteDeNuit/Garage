@@ -1,8 +1,6 @@
 package org.example;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 public class Main {
@@ -10,6 +8,19 @@ public class Main {
         for (Identifiable item : items) {
             System.out.println(item.getId());
         }
+    }
+    static int runExperiment(Runnable increment,java.util.function.IntSupplier result) throws InterruptedException {
+        ExecutorService pool = Executors.newFixedThreadPool(4);
+        for (int t = 0; t < 4; t++) {
+            pool.submit(() -> {
+                for (int i = 0; i < 100_000; i++) {
+                    increment.run();
+                }
+            });
+        }
+        pool.shutdown();
+        pool.awaitTermination(1, TimeUnit.MINUTES);
+        return result.getAsInt();
     }
     public static void main(String[] args) throws InterruptedException {
         CrudRepository<Car> cars = new InMemoryRepository<>(Car.class,1000);
@@ -107,6 +118,24 @@ public class Main {
         System.out.println(garage.findBy(c -> c.getEngineCode().equals("2JZ-GTE")));
         System.out.println(garage.stats().count());
         System.out.println(cars.getLastId());
+        try {
+            ExecutorService statsPool = Executors.newFixedThreadPool(2);
+            Future<Double> avgFuture = statsPool.submit(() -> garage.stats().averageHp());
+            System.out.println("Среднее из другого потока: " + avgFuture.get());
+            statsPool.shutdown();
+        }
+        catch (ExecutionException e)
+        {
+            System.out.println(e.getMessage());
+        }
+        Counter plain = new Counter();
+        SyncCounter sync = new SyncCounter();
+        AtomicCounter atomic = new AtomicCounter();
+
+        System.out.println("Сломанный:    " + runExperiment(plain::increment,  plain::getValue));
+        System.out.println("Synchronized: " + runExperiment(sync::increment,   sync::getValue));
+        System.out.println("Atomic:       " + runExperiment(atomic::increment, atomic::getValue));
+
     }
 
 
