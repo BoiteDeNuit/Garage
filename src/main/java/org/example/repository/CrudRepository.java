@@ -1,4 +1,6 @@
-package org.example;
+package org.example.model;
+
+import org.example.StorageFullException;
 
 import java.util.List;
 import java.util.Optional;

@@ -1,5 +1,8 @@
 package org.example;
 
+import org.example.model.CrudRepository;
+import org.example.model.Identifiable;
+
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
