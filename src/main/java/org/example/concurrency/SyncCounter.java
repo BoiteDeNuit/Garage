@@ -1,4 +1,4 @@
-package org.example;
+package org.example.concurrency;
 
 public class SyncCounter {
     private int value;

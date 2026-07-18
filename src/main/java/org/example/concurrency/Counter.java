@@ -1,4 +1,4 @@
-package org.example;
+package org.example.concurrency;
 
 public class Counter {
     private int value;

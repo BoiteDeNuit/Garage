@@ -1,6 +1,6 @@
-package org.example;
+package org.example.repository;
 
-import org.example.model.CrudRepository;
+import org.example.exception.StorageFullException;
 import org.example.model.Identifiable;
 
 import java.util.*;

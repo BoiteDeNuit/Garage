@@ -1,5 +1,7 @@
-package org.example;
+package org.example.service;
 
+import org.example.exception.EntityNotFoundException;
+import org.example.exception.StorageFullException;
 import org.example.model.Car;
 import org.example.model.GarageStats;
 import org.example.repository.CrudRepository;
