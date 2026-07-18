@@ -196,7 +196,7 @@ public class Main {
         printIds(owners.findAll());
 
         // закомментированный для отладки
-        // runParallelImport();
+        runParallelImport();
         GarageStats stats = garage.stats();
 
         demoOptionalStyles();
