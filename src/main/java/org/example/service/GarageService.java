@@ -24,6 +24,7 @@ public class GarageService{
     {
         return repository.findById(id).orElseThrow(() -> new EntityNotFoundException("Машина с id: " + id + " не найдена"));
     }
+
     public GarageStats stats()
     {
         List<Car> all = repository.findAll();
