@@ -16,6 +16,7 @@ import org.example.service.GarageService;
 
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.function.IntPredicate;
 import java.util.stream.Collectors;
 
 public class Main {
@@ -28,7 +29,35 @@ public class Main {
             System.out.println(item.getId());
         }
     }
+    static void Menu()
+    {
+        System.out.println("Меню Гаража: \n" +
+                "1 - Добавить машину \n" +
+                "2 - Просмотреть гараж \n" +
+                "3 - Поиск по мотору \n" +
+                "4 - Статистика машин в гараже \n" +
+                "5 - Фильтр машин по мощности \n" +
+                "6 - Случайная загрузка N машин \n" +
+                "7 - Удалить машину по id \n" +
+                "0 - Выход");
+        boolean running = true;
+        while (running)
+        {
+            int menu = readAnyInt("Введите пункт меню: ", v -> v >= 0, "Должно быть числом от 0 до 7");
+            switch (menu) {
+                case 1 -> readCarFromConsole();
+                case 2 -> readCarFromConsole();
+                case 3 -> readCarFromConsole();
+                case 4 -> readCarFromConsole();
+                case 5 -> readCarFromConsole();
+                case 6 -> readCarFromConsole();
+                case 7 -> readCarFromConsole();
+                case 0 -> running = false;
+                default -> System.out.println("Нет такого пункта");
+            }
+        }
 
+    }
     static int runExperiment(Runnable increment, java.util.function.IntSupplier result) throws InterruptedException {
         ExecutorService pool = Executors.newFixedThreadPool(4);
         for (int t = 0; t < 4; t++) {
@@ -168,29 +197,22 @@ public class Main {
         System.out.println(cars.getLastId());
     }
 
-    static int readPositiveInt(String prompt)
+    static int readAnyInt(String prompt, IntPredicate valid,String errorMsg)
     {
         while (true){
             System.out.println(prompt);
-            int value = Integer.parseInt(scan.nextLine().trim());
             try {
-                while(true)
-                {
-                    if(value>0)
-                    {
-                        return value;
-                    }
-                    System.out.println("Должно быть больше нуля");
-                }
+                int value = Integer.parseInt(scan.nextLine().trim());
+                if(valid.test(value)) return value;
+                System.out.println(errorMsg);
             }
             catch (NumberFormatException e)
             {
                 System.out.println("Это не число попробуй ещё раз");
             }
         }
-
-
     }
+
 
     static void readCarFromConsole()
     {
@@ -198,8 +220,8 @@ public class Main {
         System.out.print("Бренд: ");     String brand = scan.nextLine().trim();
         System.out.print("Модель: ");    String model = scan.nextLine().trim();
         System.out.print("Двигатель: "); String engineCode = scan.nextLine().trim();
-        int year = readPositiveInt("Год: ");
-        int horsePower = readPositiveInt("Мощность: ");
+        int year = readAnyInt("Год: ", v -> v > 0, "Число должно быть больше нуля");
+        int horsePower = readAnyInt("Мощность: ", v -> v > 0, "Число должно быть больше нуля");
         Car car = Car.builder().brand(brand).model(model).year(year).engineCode(engineCode).horsePower(horsePower).build();
         try {
             garage.addCar(car);
@@ -250,9 +272,9 @@ public class Main {
         demoFuture();
 
         counterDemo();
-        readCarFromConsole();
         stats = garage.stats();
         printAnalytics(stats);
+        Menu();
 
     }
 
