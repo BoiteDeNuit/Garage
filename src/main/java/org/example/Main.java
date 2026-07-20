@@ -176,6 +176,47 @@ public class Main {
         } catch (ExecutionException e) {
             System.out.println(e.getCause());
         }
+        ```
+        static void carBuilder()
+        {
+            System.out.println("Введите Брэнд,Модель,Двигатель,Год и Число л.с через enter ");
+
+            String brand = scan.nextLine().trim();
+            String model = scan.nextLine().trim();
+            String engineCode = scan.nextLine().trim();
+            int year;
+            int horsePower;
+            while (true)
+            {
+                try
+                {
+                    year = Integer.parseInt(scan.nextLine().trim());
+                    break;
+                }
+                catch (NumberFormatException e)
+                {
+                    System.out.println("Это не число попробуй ещё раз");
+                }
+            }
+            while (true)
+            {
+                try
+                {
+                    horsePower = Integer.parseInt(scan.nextLine().trim());
+                    if(horsePower > 0)
+                    {
+                        break;
+                    }
+                    else
+                    {
+                        System.out.println("Число лошадиных сил не должно быть меньше или равно нулю");
+                    }
+                }
+                catch (NumberFormatException e)
+                {
+                    System.out.println("Это не число попробуй ещё раз");
+                }
+            }
     }
 
     public static void main(String[] args) throws InterruptedException {
