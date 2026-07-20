@@ -41,6 +41,15 @@ public class GarageService{
     public List<Car> findBy(Predicate<Car> condition)
     {
         return repository.findAll().stream().filter(condition).toList();
-
+    }
+    public List<Car> returnAll()
+    {
+       List<Car> all = repository.findAll();
+       System.out.println("Все машины: \t");
+       for(Car car : all)
+       {
+           System.out.println(car);
+       }
+       return all;
     }
 }
