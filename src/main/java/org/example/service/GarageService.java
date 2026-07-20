@@ -45,10 +45,17 @@ public class GarageService{
     public List<Car> returnAll()
     {
        List<Car> all = repository.findAll();
-       System.out.println("Все машины: \t");
-       for(Car car : all)
+       if(all.isEmpty())
        {
-           System.out.println(car);
+           System.out.println("Гараж пуст");
+       }
+       else
+       {
+           System.out.println("Все машины: \t");
+           for(Car car : all)
+           {
+               System.out.println(car);
+           }
        }
        return all;
     }
