@@ -1,12 +1,7 @@
 package org.example;
 
-import org.example.concurrency.AtomicCounter;
-import org.example.concurrency.Counter;
-import org.example.concurrency.SyncCounter;
-import org.example.exception.EntityNotFoundException;
 import org.example.exception.StorageFullException;
 import org.example.model.Car;
-import org.example.model.Identifiable;
 import org.example.model.Owner;
 import org.example.repository.CrudRepository;
 import org.example.repository.InMemoryRepository;
@@ -14,9 +9,10 @@ import org.example.service.GarageService;
 
 import java.util.List;
 import java.util.Scanner;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.IntPredicate;
-import java.util.function.IntSupplier;
 
 public class Main {
     private static CrudRepository<Car> cars;
@@ -24,11 +20,6 @@ public class Main {
     private static GarageService garage;
     private static Scanner scan = new Scanner(System.in);
 
-    static void printIds(List<? extends Identifiable> items) {
-        for (Identifiable item : items) {
-            System.out.println(item.getId());
-        }
-    }
 
     static void Menu() throws InterruptedException {
         System.out.println("Меню Гаража: \n" +
@@ -62,61 +53,6 @@ public class Main {
         garage.returnAll();
     }
 
-    static int runExperiment(Runnable increment, IntSupplier result) throws InterruptedException {
-
-        try (ExecutorService pool = Executors.newFixedThreadPool(8)) {
-            for (int t = 0; t < 4; t++) {
-                pool.submit(() -> {
-                    for (int i = 0; i < 100_000; i++) {
-                        increment.run();
-                    }
-                });
-            }
-            pool.awaitTermination(30, TimeUnit.MILLISECONDS);
-            return result.getAsInt();
-        }
-    }
-
-    static void counterDemo() throws InterruptedException {
-        Counter plain = new Counter();
-        SyncCounter sync = new SyncCounter();
-        AtomicCounter atomic = new AtomicCounter();
-        System.out.println("Сломанный:    " + runExperiment(plain::increment, plain::getValue));
-        System.out.println("Synchronized: " + runExperiment(sync::increment, sync::getValue));
-        System.out.println("Atomic:       " + runExperiment(atomic::increment, atomic::getValue));
-    }
-
-    static void seedGarage() {
-        try {
-            garage.addCar(Car.builder()
-                    .brand("Toyota").model("MarkII")
-                    .engineCode("2JZ-GTE").horsePower(270).year(1999)
-                    .build());
-            garage.addCar(Car.builder()
-                    .brand("Toyota").model("MarkII")
-                    .engineCode("1JZ-GE").horsePower(290).year(1999)
-                    .build());
-            garage.addCar(Car.builder()
-                    .brand("Mers").model("Mark4I")
-                    .engineCode("B56").horsePower(280).year(1999)
-                    .build());
-            garage.addCar(Car.builder()
-                    .brand("Subaru").model("MARCHOK")
-                    .engineCode("2JZ-GTE").horsePower(280).year(1999)
-                    .build());
-            garage.addCar(Car.builder()
-                    .brand("Benz").model("MAKKR")
-                    .engineCode("1JZ-GTE").horsePower(280).year(1999)
-                    .build());
-            garage.addCar(new Car("Toyota", "MAM", "2JZ-GTE", 280, 1999));
-            owners.save(new Owner("Yurii", "Samara"));
-            owners.save(new Owner("Egor", "Samara"));
-            owners.save(new Owner("Anton", "Samara"));
-
-        } catch (StorageFullException e) {
-            System.out.println(e.getMessage());
-        }
-    }
     static void filterHorsePowers()
     {
         boolean running = true;
@@ -184,19 +120,6 @@ public class Main {
         System.out.println(garage.findBy(c -> c.getEngineCode().equalsIgnoreCase(engine)));
     }
 
-    static void demoOptionalStyles() {
-        try {
-            Car orBoom = cars.findById(999L).orElseThrow(() -> new EntityNotFoundException("Нет такой машины с id 999"));
-            System.out.println("Нашли " + orBoom);
-        } catch (EntityNotFoundException e) {
-            System.out.println(e.getMessage());
-        }
-        Car defaultCar = cars.findById(1L).orElseThrow(() -> new EntityNotFoundException("Нет такой машины с id 1"));
-        cars.findById(999L).ifPresent(c -> System.out.println("Нашли " + c));
-        Car withDefault = cars.findById(999L).orElse(defaultCar);
-        System.out.println("Вместо 999 нашли " + withDefault);
-    }
-
     static void printAnalytics() {
         System.out.println("Статистика машин в гараже");
         System.out.println("Средняя мощность машин: " + garage.stats().averageHp());
@@ -235,16 +158,6 @@ public class Main {
         } catch (StorageFullException e) {
             System.out.println("Гараж полон");
         }
-    }
-
-    static void demoFuture() throws InterruptedException {
-        try (ExecutorService statsPool = Executors.newFixedThreadPool(4)) {
-            Future<Double> avgFuture = statsPool.submit(() -> garage.stats().averageHp());
-            System.out.println("Среднее из другого потока: " + avgFuture.get());
-        } catch (ExecutionException e) {
-            System.out.println(e.getCause());
-        }
-
     }
 
     public static void main(String[] args) throws InterruptedException {
