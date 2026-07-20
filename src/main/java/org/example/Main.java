@@ -1,24 +1,22 @@
 package org.example;
 
-import org.apache.commons.lang3.StringUtils;
 import org.example.concurrency.AtomicCounter;
 import org.example.concurrency.Counter;
 import org.example.concurrency.SyncCounter;
 import org.example.exception.EntityNotFoundException;
 import org.example.exception.StorageFullException;
 import org.example.model.Car;
-import org.example.model.GarageStats;
-import org.example.repository.CrudRepository;
 import org.example.model.Identifiable;
 import org.example.model.Owner;
+import org.example.repository.CrudRepository;
 import org.example.repository.InMemoryRepository;
 import org.example.service.GarageService;
 
-import java.util.*;
+import java.util.List;
+import java.util.Scanner;
 import java.util.concurrent.*;
 import java.util.function.IntPredicate;
 import java.util.function.IntSupplier;
-import java.util.stream.Collectors;
 
 public class Main {
     private static CrudRepository<Car> cars;
@@ -32,7 +30,7 @@ public class Main {
         }
     }
 
-    static void Menu() {
+    static void Menu() throws InterruptedException {
         System.out.println("Меню Гаража: \n" +
                 "1 - Добавить машину \n" +
                 "2 - Просмотреть гараж \n" +
@@ -50,9 +48,9 @@ public class Main {
                 case 2 -> printAll();
                 case 3 -> findByEngine();
                 case 4 -> printAnalytics();
-                case 5 -> readCarFromConsole();
-                case 6 -> readCarFromConsole();
-                case 7 -> readCarFromConsole();
+                case 5 -> filterHorsePowers();
+                case 6 -> runParallelImport();
+                case 7 -> deleteCarById();
                 case 0 -> running = false;
                 default -> System.out.println("Нет такого пункта");
             }
@@ -119,8 +117,40 @@ public class Main {
             System.out.println(e.getMessage());
         }
     }
-
-    static boolean demoDelete(Long id) {
+    static void filterHorsePowers()
+    {
+        boolean running = true;
+        while (running)
+        {
+            int threshold = readAnyInt("Введите порог л.c: ",v -> v >= 0,"Порог не может быть отрицательным");
+            System.out.println("Введите Фильтр < или >");
+            String filter = scan.nextLine().trim();
+            List<Car> cars;
+            switch (filter) {
+                case "<":
+                    cars = garage.findBy(c -> c.getHorsePower() < threshold);
+                    for(Car car : cars)
+                    {
+                        System.out.println(car);
+                    }
+                    running = false;
+                    break;
+                case ">":
+                     cars = garage.findBy(c -> c.getHorsePower() > threshold);
+                    for(Car car : cars)
+                    {
+                        System.out.println(car);
+                    }
+                   running = false;
+                    break;
+                default:
+                    System.out.println("Выберите только между < и > ");
+                    break;
+            }
+        }
+    }
+    static boolean deleteCarById() {
+        Long id = (long) readAnyInt("Введите id любой машины: ",v -> v > 0, "Id должен быть больше нуля");
         boolean delete = cars.deleteById(id);
         if (!delete) {
             System.out.println("Не было такой машины");
@@ -132,7 +162,8 @@ public class Main {
 
     static void runParallelImport() throws InterruptedException {
         try (ExecutorService pool = Executors.newFixedThreadPool(8)) {
-            for (int i = 0; i < 1000; i++) {
+            int maxSize = readAnyInt("Введите число Машин для заполнения", v -> v >= 0, "Число должно быть больше или равно нулю");
+            for (int i = 0; i < maxSize; i++) {
                 int n = i;
                 pool.submit(() -> {
                     try {
@@ -168,7 +199,7 @@ public class Main {
 
     static void printAnalytics() {
         System.out.println("Статистика машин в гараже");
-        System.out.println("Средняя мощность машин: " + garage.stats().averageHp() );
+        System.out.println("Средняя мощность машин: " + garage.stats().averageHp());
         System.out.println("Мощнейшая машина: " + garage.stats().strongestModel());
         System.out.println("Число машин в Гараже: " + garage.stats().count());
     }
@@ -221,25 +252,6 @@ public class Main {
         cars = new InMemoryRepository<>(Car.class, 1000);
         owners = new InMemoryRepository<>(Owner.class, 10);
         garage = new GarageService(cars);
-
-        seedGarage();
-
-        System.out.println("Число машин: " + garage.stats().count());
-
-        demoDelete(3L);
-
-        System.out.println("Число машин: " + garage.stats().count());
-
-        printIds(cars.findAll());
-        printIds(owners.findAll());
-
-        // закомментированный для отладки
-        // runParallelImport();
-
-        demoOptionalStyles();
-
-        demoFuture();
-        counterDemo();
 
         Menu();
 
