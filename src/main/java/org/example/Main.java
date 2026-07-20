@@ -22,7 +22,7 @@ public class Main {
     private static CrudRepository<Car> cars;
     private static InMemoryRepository<Owner> owners;
     private static GarageService garage;
-
+    private static Scanner scan = new Scanner(System.in);
     static void printIds(List<? extends Identifiable> items) {
         for (Identifiable item : items) {
             System.out.println(item.getId());
@@ -168,6 +168,54 @@ public class Main {
         System.out.println(cars.getLastId());
     }
 
+    static void readCarFromConsole()
+    {
+        System.out.println("Введите Брэнд,Модель,Двигатель,Год и Число л.с через enter ");
+        String brand = scan.nextLine().trim();
+        String model = scan.nextLine().trim();
+        String engineCode = scan.nextLine().trim();
+        int year;
+        int horsePower;
+        while (true)
+        {
+            try
+            {
+                year = Integer.parseInt(scan.nextLine().trim());
+                break;
+            }
+            catch (NumberFormatException e)
+            {
+                System.out.println("Это не число попробуй ещё раз");
+            }
+        }
+        while (true)
+        {
+            try
+            {
+                horsePower = Integer.parseInt(scan.nextLine().trim());
+                if(horsePower > 0)
+                {
+                    break;
+                }
+                else
+                {
+                    System.out.println("Число лошадиных сил не должно быть меньше или равно нулю");
+                }
+            }
+            catch (NumberFormatException e)
+            {
+                System.out.println("Это не число попробуй ещё раз");
+            }
+        }
+        try {
+            garage.addCar(Car.builder().brand(brand).model(model).year(year).engineCode(engineCode).horsePower(horsePower).build());
+        }
+        catch(StorageFullException e)
+        {
+            System.out.println("Гараж полон");
+        }
+    }
+
     static void demoFuture() throws InterruptedException {
         try (ExecutorService statsPool = Executors.newFixedThreadPool(2)) {
 
@@ -176,47 +224,7 @@ public class Main {
         } catch (ExecutionException e) {
             System.out.println(e.getCause());
         }
-        ```
-        static void carBuilder()
-        {
-            System.out.println("Введите Брэнд,Модель,Двигатель,Год и Число л.с через enter ");
 
-            String brand = scan.nextLine().trim();
-            String model = scan.nextLine().trim();
-            String engineCode = scan.nextLine().trim();
-            int year;
-            int horsePower;
-            while (true)
-            {
-                try
-                {
-                    year = Integer.parseInt(scan.nextLine().trim());
-                    break;
-                }
-                catch (NumberFormatException e)
-                {
-                    System.out.println("Это не число попробуй ещё раз");
-                }
-            }
-            while (true)
-            {
-                try
-                {
-                    horsePower = Integer.parseInt(scan.nextLine().trim());
-                    if(horsePower > 0)
-                    {
-                        break;
-                    }
-                    else
-                    {
-                        System.out.println("Число лошадиных сил не должно быть меньше или равно нулю");
-                    }
-                }
-                catch (NumberFormatException e)
-                {
-                    System.out.println("Это не число попробуй ещё раз");
-                }
-            }
     }
 
     public static void main(String[] args) throws InterruptedException {
@@ -237,7 +245,7 @@ public class Main {
         printIds(owners.findAll());
 
         // закомментированный для отладки
-        runParallelImport();
+        // runParallelImport();
         GarageStats stats = garage.stats();
 
         demoOptionalStyles();
@@ -247,6 +255,9 @@ public class Main {
         demoFuture();
 
         counterDemo();
+        readCarFromConsole();
+        stats = garage.stats();
+        printAnalytics(stats);
 
     }
 
