@@ -29,8 +29,8 @@ public class GarageService{
     {
         try
         {
-            addCar(CarMapper.toDto(new Car("Toyota", "Supra", "2JZ-GTE", 320, 1998)));
-            addCar(CarMapper.toDto(new Car("Subaru", "Impreza", "EJ20", 280, 1999)));
+            repository.save(new Car("Toyota", "Supra", "2JZ-GTE", 320, 1998));
+            repository.save(new Car("Subaru", "Impreza", "EJ20", 280, 1999));
         }
         catch (StorageFullException e)
         {
@@ -65,4 +65,11 @@ public class GarageService{
     {
        return repository.findAll().stream().map(CarMapper::toDto).toList();
     }
+
+    public void deleteCar(Long id)
+    {
+        repository.deleteById(id);
+    }
+
+
 }
