@@ -4,9 +4,7 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
  .DS_Store
- .gitattributes
-.gitignore
-.mvn/
+
 ### STS ###
 .apt_generated
 .classpath
