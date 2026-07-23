@@ -1,14 +1,22 @@
 package com.example.model;
 
-import java.util.Objects;
+import jakarta.persistence.*;
 
+import java.util.Objects;
+@Entity
+@Table(name = "cars")
 public class Car implements Identifiable {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    @Column(nullable = false)
     private String brand;
+    @Column(nullable = false)
     private String model;
     private String engineCode;
     private int horsePower;
     private int year;
+    protected Car() {}
     public Car(String brand, String model,String engineCode,int horsePower,int year)
     {
         this.brand= brand;

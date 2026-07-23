@@ -18,8 +18,12 @@ public class CarController {
     private final GarageService garage;
     public CarController(GarageService garage) { this.garage=garage; }
     @GetMapping
-    public List<CarDto> all() {
-        return garage.findAll();
+    public List<CarDto> all(@RequestParam(required = false) String brand) {
+        if (brand == null)
+        {
+            return garage.findAll();
+        }
+        return garage.findByBrand(brand);
     }
     @GetMapping ("/{id}")
     public CarDto one(@PathVariable Long id)

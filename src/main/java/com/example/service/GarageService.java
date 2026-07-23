@@ -61,6 +61,10 @@ public class GarageService{
     {
         return repository.findAll().stream().filter(condition).map(CarMapper::toDto).toList();
     }
+    public List<CarDto> findByBrand(String brand)
+    {
+        return repository.findAll().stream().filter(c -> c.getBrand().equalsIgnoreCase(brand)).map(CarMapper::toDto).toList();
+    }
     public List<CarDto> findAll()
     {
        return repository.findAll().stream().map(CarMapper::toDto).toList();
