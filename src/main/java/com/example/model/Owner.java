@@ -1,9 +1,21 @@
 package com.example.model;
 
+import com.example.dto.CarMapper;
+import jakarta.persistence.*;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@Entity
+@Table(name = "owners")
 public class Owner implements Identifiable {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    @Column(nullable = false)
     private String name;
     private String city;
+    protected Owner() {}
     public Owner(String name,String city)
     {
         this.city = city;
@@ -26,4 +38,17 @@ public class Owner implements Identifiable {
     public String getName() {
         return name;
     }
+    @OneToMany(mappedBy = "owner")
+    private List<Car> cars = new ArrayList<>();
+
+    public void addCar(Car car) {
+        cars.add(car);
+        car.setOwner(this);
+    }
+    public void removeCar(Car car)
+    {
+        cars.remove(car);
+        car.setOwner(null);
+    }
+
 }
