@@ -2,6 +2,7 @@ package com.example.service;
 
 import com.example.dto.CarDto;
 import com.example.dto.CarMapper;
+import com.example.dto.OwnerDto;
 import com.example.exception.EntityNotFoundException;
 import com.example.model.Car;
 import com.example.dto.GarageStats;
@@ -30,6 +31,19 @@ public class GarageService{
         {
             System.out.println(owner.getName() +" " + owner.getCars().size() + " Машин");
         }
+    }
+    @Transactional(readOnly = true)
+    public OwnerDto getOwner(Long id)
+    {
+        Owner owner = ownerRepository.findById(id).orElseThrow();
+        OwnerDto dto = new OwnerDto(id,owner.getName(), owner.getCity(), owner.getCars().size());
+        return dto;
+    }
+    @Transactional
+    public void raisePower(Long carId, int delta)
+    {
+        Car car = repository.findById(carId).orElseThrow();
+        car.setHorsePower(car.getHorsePower() + delta);
     }
     public List<Owner> findAllOwners()
     {

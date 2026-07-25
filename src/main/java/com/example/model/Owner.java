@@ -43,7 +43,6 @@ public class Owner implements Identifiable {
     }
     @OneToMany(mappedBy = "owner")
     private List<Car> cars = new ArrayList<>();
-
     public void addCar(Car car) {
         cars.add(car);
         car.setOwner(this);

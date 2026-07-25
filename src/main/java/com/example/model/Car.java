@@ -131,6 +131,11 @@ public class Car implements Identifiable {
     {
         return owner;
     }
+
+    public void setHorsePower(int horsePower) {
+        this.horsePower = horsePower;
+    }
+
     public void setOwner(Owner owner) {
         this.owner = owner;
     }
