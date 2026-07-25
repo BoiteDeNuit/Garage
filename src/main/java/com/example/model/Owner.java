@@ -38,6 +38,9 @@ public class Owner implements Identifiable {
     public String getName() {
         return name;
     }
+    public List<Car> getCars() {
+        return cars;
+    }
     @OneToMany(mappedBy = "owner")
     private List<Car> cars = new ArrayList<>();
 

@@ -5,17 +5,35 @@ import com.example.dto.CarMapper;
 import com.example.exception.EntityNotFoundException;
 import com.example.model.Car;
 import com.example.dto.GarageStats;
+import com.example.model.Owner;
 import com.example.repository.CarJpaRepository;
+import com.example.repository.OwnerJpaRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Predicate;
 @Service
 public class GarageService{
     private final CarJpaRepository repository;
-    public GarageService (CarJpaRepository repository)
+    private final OwnerJpaRepository ownerRepository;
+    public GarageService (CarJpaRepository repository, OwnerJpaRepository ownerRepository)
     {
         this.repository=repository;
+        this.ownerRepository=ownerRepository;
+    }
+    @Transactional
+    public void demoNPlusOne(){
+        List<Owner> owners = ownerRepository.findAll();
+        for(Owner owner : owners)
+        {
+            System.out.println(owner.getName() +" " + owner.getCars().size() + " Машин");
+        }
+    }
+    public List<Owner> findAllOwners()
+    {
+        return ownerRepository.findAll();
     }
     public CarDto addCar (CarDto dto)
     {
