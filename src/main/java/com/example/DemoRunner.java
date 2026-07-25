@@ -1,6 +1,5 @@
 package com.example;
 
-import com.example.model.Car;
 import com.example.repository.CarJpaRepository;
 import com.example.repository.OwnerJpaRepository;
 import com.example.service.GarageService;

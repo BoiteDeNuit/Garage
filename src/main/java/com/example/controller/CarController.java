@@ -2,12 +2,10 @@ package com.example.controller;
 
 import com.example.dto.CarDto;
 import com.example.dto.GarageStats;
-import com.example.exception.EntityNotFoundException;
 import com.example.exception.StorageFullException;
-import com.example.model.Car;
 import com.example.service.GarageService;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
-import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -32,7 +30,7 @@ public class CarController {
     }
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public CarDto create(@Validated @RequestBody CarDto dto) throws StorageFullException
+    public CarDto create(@Valid @RequestBody CarDto dto) throws StorageFullException
     {
         return garage.addCar(dto);
     }
