@@ -14,8 +14,8 @@ import java.time.LocalDateTime;
 import java.util.stream.Collectors;
 
 @RestControllerAdvice
-public class GlobalExpectionHandler {
-    private static final Logger log = LoggerFactory.getLogger(GlobalExpectionHandler.class);
+public class GlobalExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     @ExceptionHandler(EntityNotFoundException.class)
     public ResponseEntity<ErrorResponse> notFound(EntityNotFoundException e, HttpServletRequest request)
     {
@@ -36,7 +36,7 @@ public class GlobalExpectionHandler {
 
     private ResponseEntity<ErrorResponse> build(HttpStatus status,String message,HttpServletRequest request)
     {
-        ErrorResponse body = new ErrorResponse(LocalDateTime.now(),status.value(),status.getReasonPhrase(),message);
+        ErrorResponse body = new ErrorResponse(LocalDateTime.now(),status.value(),status.getReasonPhrase(),message,request.getRequestURI());
         return ResponseEntity.status(status).body(body);
     }
 }
