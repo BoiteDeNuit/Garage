@@ -85,14 +85,4 @@ class InMemoryRepositoryTest {
         assertEquals(42L,saved.getId());
         assertThat(saved.getId()).isEqualTo(42L);
     }
-    @ParameterizedTest
-    @CsvSource({
-            "0, 5",
-            "280, 3",
-            "320, 1",
-            "999, 0"
-    })
-    void filtersByThreshold(int threshold,int expectedCount)
-    {
-    }
 }
