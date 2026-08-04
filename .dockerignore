@@ -2,5 +2,5 @@ target
 .gitattributes
 .idea
 *.md
-.env
 .git/
+.env
