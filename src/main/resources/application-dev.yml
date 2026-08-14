@@ -4,8 +4,6 @@ spring:
     username: garage
     password: secret
   jpa:
-    hibernate:
-      ddl-auto: update
     show-sql: true
     properties:
       hibernate:

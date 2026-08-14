@@ -4,7 +4,5 @@ spring:
     username: garage
     password: secret
   jpa:
-    hibernate:
-      ddl-auto: validate
     show-sql: false
 
