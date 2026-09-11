@@ -6,6 +6,8 @@ import com.example.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -33,7 +35,16 @@ public class GlobalExceptionHandler {
         log.error("Необработанная ошибка", e);
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "Внутренняя ошибка сервера", request);
     }
-
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ErrorResponse> badCredentials(AuthenticationException e, HttpServletRequest request)
+    {
+        return build(HttpStatus.UNAUTHORIZED,"Неверный логин или пароль",request);
+    }
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> notReadable(HttpMessageNotReadableException e,HttpServletRequest request)
+    {
+        return build(HttpStatus.BAD_REQUEST,"Некорректный формат запроса",request);
+    }
     private ResponseEntity<ErrorResponse> build(HttpStatus status,String message,HttpServletRequest request)
     {
         ErrorResponse body = new ErrorResponse(LocalDateTime.now(),status.value(),status.getReasonPhrase(),message,request.getRequestURI());

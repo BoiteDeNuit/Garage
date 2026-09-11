@@ -10,9 +10,11 @@ public record CarDto(
         @NotBlank(message = "Модель обязательна")
         String model,
         String engineCode,
+        @NotNull(message = "Мощность обязательна")
         @Min(value = 1,message = "Мощность должна быть положительной")
         @Max(value = 3000,message = "Мощность неправдоподобно велика")
-        int horsePower,
+        Integer horsePower,
+        @NotNull(message = "Год обязателен")
         @Min(1885)@Max(2100)
-        int year
+        Integer year
 ) {}
