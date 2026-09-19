@@ -1,0 +1,1 @@
+ALTER TABLE cars ADD COLUMN price NUMERIC(12,2);

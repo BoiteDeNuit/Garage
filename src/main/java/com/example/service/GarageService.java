@@ -1,17 +1,17 @@
 package com.example.service;
 
-import com.example.dto.CarDto;
-import com.example.dto.CarMapper;
-import com.example.dto.OwnerDto;
+import com.example.client.CurrencyClient;
+import com.example.dto.*;
 import com.example.exception.EntityNotFoundException;
 import com.example.model.Car;
-import com.example.dto.GarageStats;
 import com.example.model.Owner;
 import com.example.repository.CarJpaRepository;
 import com.example.repository.OwnerJpaRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Predicate;
@@ -19,10 +19,12 @@ import java.util.function.Predicate;
 public class GarageService{
     private final CarJpaRepository repository;
     private final OwnerJpaRepository ownerRepository;
-    public GarageService (CarJpaRepository repository, OwnerJpaRepository ownerRepository)
+    private final CurrencyClient currencyClient;
+    public GarageService (CarJpaRepository repository, OwnerJpaRepository ownerRepository,CurrencyClient currencyClient)
     {
         this.repository=repository;
         this.ownerRepository=ownerRepository;
+        this.currencyClient=currencyClient;
     }
     @Transactional
     public void demoNPlusOne(){
@@ -91,6 +93,18 @@ public class GarageService{
     {
         repository.deleteById(id);
     }
-
+    
+    public CarPriceDto priceIn(Long id,String currency)
+    {
+        Car car = repository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Машина с id: " + id + " не найдена" ));
+        if(car.getPrice() == null)
+        {
+            throw new EntityNotFoundException("У машины с id: " + id + " не указана цена");
+        }
+        BigDecimal rate = currencyClient.rateToRub(currency);
+        BigDecimal convertedPrice = car.getPrice().divide(rate,2, RoundingMode.HALF_UP);
+        return new CarPriceDto(car.getId(),currency.toUpperCase(),rate,convertedPrice);
+    }
 
 }

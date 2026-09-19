@@ -2,6 +2,7 @@ package com.example.model;
 
 import jakarta.persistence.*;
 
+import java.math.BigDecimal;
 import java.util.Objects;
 @Entity
 @Table(name = "cars")
@@ -16,6 +17,8 @@ public class Car implements Identifiable {
     private String engineCode;
     private int horsePower;
     private int year;
+    @Column(precision = 12,scale = 2)
+    private BigDecimal price;
     protected Car() {}
     public Car(String brand, String model,String engineCode,int horsePower,int year)
     {
@@ -53,7 +56,8 @@ public class Car implements Identifiable {
     public int getYear() {
         return year;
     }
-
+    public BigDecimal getPrice() { return price;}
+    public void setPrice(BigDecimal price) { this.price=price; }
     @Override
     public boolean equals(Object o)
     {
@@ -82,6 +86,7 @@ public class Car implements Identifiable {
         this.year = builder.year;
         this.model = builder.model;
         this.horsePower = builder.horsePower;
+        this.price = builder.price;
     }
     public static Builder builder()
     {
@@ -94,9 +99,15 @@ public class Car implements Identifiable {
         private String engineCode;
         private int horsePower;
         private int year;
+        private BigDecimal price;
         public Builder brand(String brand)
         {
             this.brand=brand;
+            return this;
+        }
+        public Builder price(BigDecimal price)
+        {
+            this.price=price;
             return this;
         }
         public Builder model(String model)

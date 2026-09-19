@@ -2,6 +2,8 @@ package com.example.dto;
 
 import jakarta.validation.constraints.*;
 
+import java.math.BigDecimal;
+
 public record CarDto(
         Long id,
         @NotBlank(message = "Бренд не должен быть пустым")
@@ -17,5 +19,7 @@ public record CarDto(
         Integer horsePower,
         @NotNull(message = "Год обязателен")
         @Min(1885)@Max(2100)
-        Integer year
+        Integer year,
+        @PositiveOrZero(message = "Цена не может быть отрицательной")
+        BigDecimal price
 ) {}

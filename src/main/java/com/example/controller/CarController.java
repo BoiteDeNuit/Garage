@@ -1,6 +1,7 @@
 package com.example.controller;
 
 import com.example.dto.CarDto;
+import com.example.dto.CarPriceDto;
 import com.example.dto.GarageStats;
 import com.example.exception.StorageFullException;
 import com.example.service.GarageService;
@@ -43,6 +44,11 @@ public class CarController {
     public GarageStats stats()
     {
         return garage.stats();
+    }
+    @GetMapping("/{id}/price")
+    public CarPriceDto price(@PathVariable Long id, @RequestParam(defaultValue = "USD") String currency)
+    {
+        return garage.priceIn(id,currency);
     }
 
 }

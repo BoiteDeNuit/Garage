@@ -71,7 +71,7 @@ public class CurrencyClient {
         {
             throw new ExternalServiceException("Одно из полей не дошло");
         }
-        return valute.value().divide(BigDecimal.valueOf(valute.nominal()),4, RoundingMode.HALF_UP);
+        return valute.value().divide(BigDecimal.valueOf(valute.nominal()),8, RoundingMode.HALF_UP);
 
     }
 
