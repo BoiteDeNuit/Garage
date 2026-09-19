@@ -45,6 +45,17 @@ public class GlobalExceptionHandler {
     {
         return build(HttpStatus.BAD_REQUEST,"Некорректный формат запроса",request);
     }
+    @ExceptionHandler(ExternalServiceException.class)
+    public ResponseEntity<ErrorResponse> currencyServiceUnavailable(ExternalServiceException e, HttpServletRequest request)
+    {
+        log.warn("Внешний сервис недоступен: {}", e.getMessage(), e);
+        return build(HttpStatus.SERVICE_UNAVAILABLE,"Сервис курсов валют недоступен",request);
+    }
+    @ExceptionHandler(UnknownCurrencyException.class)
+    public ResponseEntity<ErrorResponse> unknownCurrency(UnknownCurrencyException e, HttpServletRequest request)
+    {
+        return build(HttpStatus.BAD_REQUEST,"Неизвестный код валюты: " + e.getMessage(),request);
+    }
     private ResponseEntity<ErrorResponse> build(HttpStatus status,String message,HttpServletRequest request)
     {
         ErrorResponse body = new ErrorResponse(LocalDateTime.now(),status.value(),status.getReasonPhrase(),message,request.getRequestURI());

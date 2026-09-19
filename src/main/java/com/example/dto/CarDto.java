@@ -9,6 +9,7 @@ public record CarDto(
         String brand,
         @NotBlank(message = "Модель обязательна")
         String model,
+        @NotNull(message = "Двигатель обязателен")
         String engineCode,
         @NotNull(message = "Мощность обязательна")
         @Min(value = 1,message = "Мощность должна быть положительной")

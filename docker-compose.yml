@@ -10,6 +10,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_PROFILES_ACTIVE: dev
       JWT_SECRET: ${JWT_SECRET}
+      CURRENCY_API_URL: ${CURRENCY_API_URL}
     depends_on:
       db:
         condition: service_healthy
