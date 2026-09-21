@@ -20,3 +20,8 @@ currency:
     url: ${CURRENCY_API_URL}
     connect-timeout: 3s
     read-timeout: 5s
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true

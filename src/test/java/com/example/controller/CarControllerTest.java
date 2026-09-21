@@ -2,9 +2,12 @@ package com.example.controller;
 
 import com.example.dto.CarDto;
 import com.example.exception.EntityNotFoundException;
+import com.example.security.JwtAuthFilter;
+import com.example.security.SecurityErrorWriter;
 import com.example.service.GarageService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -17,7 +20,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+// Тест проверяет веб-слой: маршруты, валидацию, коды, JSON. Права доступа — не его забота,
+// поэтому фильтры security отключены, а их бины заменены моками: без них срез не соберётся.
 @WebMvcTest(CarController.class)
+@AutoConfigureMockMvc(addFilters = false)
 class CarControllerTest {
     @Autowired
     MockMvc mockMvc;
@@ -25,10 +31,14 @@ class CarControllerTest {
     ObjectMapper objectMapper;
     @MockitoBean
     GarageService service;
+    @MockitoBean
+    JwtAuthFilter jwtAuthFilter;
+    @MockitoBean
+    SecurityErrorWriter securityErrorWriter;
 
     @Test
     void returnsCarJson() throws Exception {
-        when(service.getCar(1L)).thenReturn(new CarDto(1L, "Toyota", "Supra", "2JZ", 320, 1998));
+        when(service.getCar(1L)).thenReturn(new CarDto(1L, "Toyota", "Supra", "2JZ", 320, 1998, null));
 
         mockMvc.perform(get("/api/cars/1"))
                 .andExpect(status().isOk())
@@ -48,7 +58,7 @@ class CarControllerTest {
     @Test
     void returns400() throws Exception {
 
-        CarDto invalid = new CarDto(null, "", "Supra", "2JZ", 0, 1998);
+        CarDto invalid = new CarDto(null, "", "Supra", "2JZ", 0, 1998, null);
         mockMvc.perform(post("/api/cars")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalid)))
