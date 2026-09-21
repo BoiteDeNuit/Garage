@@ -1,8 +1,10 @@
 package com.example.service;
 
 import com.example.client.CurrencyClient;
+import com.example.config.KafkaTopicsConfig;
 import com.example.dto.CarDto;
 import com.example.dto.CarPriceDto;
+import com.example.event.CarCreatedEvent;
 import com.example.exception.EntityNotFoundException;
 import com.example.model.Car;
 import com.example.repository.CarJpaRepository;
@@ -14,6 +16,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.kafka.core.KafkaTemplate;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -21,6 +24,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -33,6 +37,8 @@ class GarageServiceTest {
     private OwnerJpaRepository ownerJpaRepository;
     @Mock
     private CurrencyClient currencyClient;
+    @Mock
+    private KafkaTemplate<Long, CarCreatedEvent> kafkaTemplate;
     @InjectMocks
     private GarageService garage;
 
@@ -72,6 +78,25 @@ class GarageServiceTest {
     }
 
     @Test
+    void addCarPublishesEventWithIdAsKey()
+    {
+        when(repository.save(any(Car.class))).thenAnswer(inv -> {
+            Car car = inv.getArgument(0);
+            car.setId(42L);
+            return car;
+        });
+
+        garage.addCar(new CarDto(null, "Toyota", "Chaser", "1JZ", 280, 1998, null));
+
+        ArgumentCaptor<CarCreatedEvent> captor = ArgumentCaptor.forClass(CarCreatedEvent.class);
+        verify(kafkaTemplate).send(eq(KafkaTopicsConfig.CAR_CREATED), eq(42L), captor.capture());
+        CarCreatedEvent event = captor.getValue();
+        assertThat(event.id()).isEqualTo(42L);
+        assertThat(event.brand()).isEqualTo("Toyota");
+        assertThat(event.createdAt()).isNotNull();
+    }
+
+    @Test
     void priceInConvertsRublesByRate()
     {
         Car car = new Car("Porsche", "Taycan", "EV", 700, 2024);
@@ -82,7 +107,6 @@ class GarageServiceTest {
 
         CarPriceDto result = garage.priceIn(1L, "usd");
 
-        // курс — рубли за единицу валюты, поэтому цена делится, а не умножается
         assertThat(result.price()).isEqualByComparingTo("100953.12");
         assertThat(result.rate()).isEqualByComparingTo("84.1975");
         assertThat(result.currency()).isEqualTo("USD");
@@ -98,7 +122,6 @@ class GarageServiceTest {
         assertThatThrownBy(() -> garage.priceIn(2L, "USD"))
                 .isInstanceOf(EntityNotFoundException.class)
                 .hasMessageContaining("не указана цена");
-        // цена проверяется до запроса к ЦБ: незачем ждать ответа, который выбросим
         verifyNoInteractions(currencyClient);
     }
 

@@ -1,4 +1,17 @@
 spring:
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.LongSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
+      properties:
+        max.block.ms: 5000
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.LongDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
+      auto-offset-reset: earliest
+      properties:
+        spring.json.trusted.packages: com.example.event
   datasource:
     url: jdbc:postgresql://localhost:5433/garage
   flyway:

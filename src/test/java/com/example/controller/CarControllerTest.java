@@ -20,8 +20,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-// Тест проверяет веб-слой: маршруты, валидацию, коды, JSON. Права доступа — не его забота,
-// поэтому фильтры security отключены, а их бины заменены моками: без них срез не соберётся.
+
 @WebMvcTest(CarController.class)
 @AutoConfigureMockMvc(addFilters = false)
 class CarControllerTest {

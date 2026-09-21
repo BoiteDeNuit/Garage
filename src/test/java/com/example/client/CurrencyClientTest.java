@@ -20,19 +20,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-// Настоящий HTTP-сервер из JDK вместо MockRestServiceServer: клиент строит RestClient сам,
-// и подменить ему фабрику запросов снаружи нельзя. Зато так проверяются реальные таймауты
-// и конвертер под application/javascript — MockRestServiceServer обошёл бы и то и другое.
+
 class CurrencyClientTest
 {
-    // Форма ответа как у живого ЦБ: лишние поля (PreviousDate, ID, Previous) и иена с номиналом 100
     private static final String CBR_JSON = """
             {"Date":"2026-09-19T11:30:00+03:00","PreviousDate":"2026-09-18T11:30:00+03:00",
              "Valute":{
                "USD":{"ID":"R01235","CharCode":"USD","Nominal":1,"Value":84.1975,"Previous":84.1732},
                "JPY":{"ID":"R01820","CharCode":"JPY","Nominal":100,"Value":53.5948,"Previous":54.1206}}}
             """;
-    // ЦБ объявляет свой JSON JavaScript-ом — без настройки конвертера разбор не работает
     private static final String CBR_CONTENT_TYPE = "application/javascript; charset=utf-8";
 
     private HttpServer server;
@@ -80,7 +76,6 @@ class CurrencyClientTest
     @Test
     void dividesByNominal()
     {
-        // 53.5948 руб. за 100 иен → 0.535948 за одну; при округлении до 4 знаков было бы 0.5359
         assertThat(client().rateToRub("JPY")).isEqualByComparingTo("0.535948");
     }
 

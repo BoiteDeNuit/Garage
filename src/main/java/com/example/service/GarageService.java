@@ -1,17 +1,21 @@
 package com.example.service;
 
 import com.example.client.CurrencyClient;
+import com.example.config.KafkaTopicsConfig;
 import com.example.dto.*;
+import com.example.event.CarCreatedEvent;
 import com.example.exception.EntityNotFoundException;
 import com.example.model.Car;
 import com.example.model.Owner;
 import com.example.repository.CarJpaRepository;
 import com.example.repository.OwnerJpaRepository;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Predicate;
@@ -20,11 +24,13 @@ public class GarageService{
     private final CarJpaRepository repository;
     private final OwnerJpaRepository ownerRepository;
     private final CurrencyClient currencyClient;
-    public GarageService (CarJpaRepository repository, OwnerJpaRepository ownerRepository,CurrencyClient currencyClient)
+    private final KafkaTemplate<Long,CarCreatedEvent> kafkaTemplate;
+    public GarageService (CarJpaRepository repository, OwnerJpaRepository ownerRepository,CurrencyClient currencyClient,KafkaTemplate<Long, CarCreatedEvent> kafkaTemplate)
     {
         this.repository=repository;
         this.ownerRepository=ownerRepository;
         this.currencyClient=currencyClient;
+        this.kafkaTemplate=kafkaTemplate;
     }
     @Transactional
     public void demoNPlusOne(){
@@ -53,8 +59,10 @@ public class GarageService{
     }
     public CarDto addCar (CarDto dto)
     {
-        Car car = CarMapper.toCar(dto);
-        return CarMapper.toDto(repository.save(car));
+        Car saved = repository.save(CarMapper.toCar(dto));
+        kafkaTemplate.send(KafkaTopicsConfig.CAR_CREATED,saved.getId(), new CarCreatedEvent(saved.getId(), saved.getBrand(), saved.getModel(), Instant.now()));
+
+        return CarMapper.toDto(saved);
     }
     public CarDto getCar(Long id)
     {
@@ -106,5 +114,6 @@ public class GarageService{
         BigDecimal convertedPrice = car.getPrice().divide(rate,2, RoundingMode.HALF_UP);
         return new CarPriceDto(car.getId(),currency.toUpperCase(),rate,convertedPrice);
     }
+
 
 }
