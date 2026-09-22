@@ -91,7 +91,7 @@ class GarageServiceTest {
         ArgumentCaptor<CarCreatedEvent> captor = ArgumentCaptor.forClass(CarCreatedEvent.class);
         verify(kafkaTemplate).send(eq(KafkaTopicsConfig.CAR_CREATED), eq(42L), captor.capture());
         CarCreatedEvent event = captor.getValue();
-        assertThat(event.id()).isEqualTo(42L);
+        assertThat(event.id()).isEqualTo(42L3);
         assertThat(event.brand()).isEqualTo("Toyota");
         assertThat(event.createdAt()).isNotNull();
     }
