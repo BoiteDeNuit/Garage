@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.example.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -55,6 +56,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> unknownCurrency(UnknownCurrencyException e, HttpServletRequest request)
     {
         return build(HttpStatus.BAD_REQUEST,"Неизвестный код валюты: " + e.getMessage(),request);
+    }
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ResponseEntity<ErrorResponse> tooManyRequests(TooManyRequestsException e, HttpServletRequest request)
+    {
+        ErrorResponse body = new ErrorResponse(LocalDateTime.now(),429,"Too many Requests","Слишком много попыток входа повторите через минуту", request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER,"60")
+                .body(body);
     }
     private ResponseEntity<ErrorResponse> build(HttpStatus status,String message,HttpServletRequest request)
     {

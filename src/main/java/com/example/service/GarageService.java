@@ -9,6 +9,8 @@ import com.example.model.Car;
 import com.example.model.Owner;
 import com.example.repository.CarJpaRepository;
 import com.example.repository.OwnerJpaRepository;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,6 +50,7 @@ public class GarageService{
         return dto;
     }
     @Transactional
+    @CacheEvict(value = "cars",key = "#carId")
     public void raisePower(Long carId, int delta)
     {
         Car car = repository.findById(carId).orElseThrow();
@@ -64,6 +67,7 @@ public class GarageService{
 
         return CarMapper.toDto(saved);
     }
+    @Cacheable(value = "cars",key = "#id")
     public CarDto getCar(Long id)
     {
         return repository.findById(id).
@@ -96,7 +100,7 @@ public class GarageService{
     {
        return repository.findAll().stream().map(CarMapper::toDto).toList();
     }
-
+    @CacheEvict(value = "cars",key = "#id")
     public void deleteCar(Long id)
     {
         repository.deleteById(id);

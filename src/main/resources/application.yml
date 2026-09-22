@@ -12,6 +12,12 @@ spring:
       auto-offset-reset: earliest
       properties:
         spring.json.trusted.packages: com.example.event
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 500ms
+      connect-timeout: 1s
   datasource:
     url: jdbc:postgresql://localhost:5433/garage
   flyway:
@@ -38,3 +44,6 @@ management:
     health:
       probes:
         enabled: true
+rate-limit:
+  login:
+    per-minute: 5
