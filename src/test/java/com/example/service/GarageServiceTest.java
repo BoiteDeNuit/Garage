@@ -9,12 +9,15 @@ import com.example.exception.EntityNotFoundException;
 import com.example.model.Car;
 import com.example.repository.CarJpaRepository;
 import com.example.repository.OwnerJpaRepository;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
 
@@ -25,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -39,6 +43,8 @@ class GarageServiceTest {
     private CurrencyClient currencyClient;
     @Mock
     private KafkaTemplate<Long, CarCreatedEvent> kafkaTemplate;
+    @Spy
+    private MeterRegistry registry = new SimpleMeterRegistry();
     @InjectMocks
     private GarageService garage;
 
@@ -94,6 +100,39 @@ class GarageServiceTest {
         assertThat(event.id()).isEqualTo(42L);
         assertThat(event.brand()).isEqualTo("Toyota");
         assertThat(event.createdAt()).isNotNull();
+    }
+
+    @Test
+    void addCarIncrementsCreatedCounter()
+    {
+        when(repository.save(any(Car.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        garage.addCar(new CarDto(null, "Toyota", "Chaser", "1JZ", 280, 1998, null));
+
+        assertThat(registry.get("garage.cars.added").counter().count()).isEqualTo(1.0);
+    }
+
+    @Test
+    void deleteCarRemovesExistingCar()
+    {
+        Car car = new Car("Toyota", "Supra", "2JZ", 320, 1998);
+        car.setId(1L);
+        when(repository.findById(1L)).thenReturn(Optional.of(car));
+
+        garage.deleteCar(1L);
+
+        verify(repository).delete(car);
+    }
+
+    @Test
+    void deleteCarThrowsWhenCarMissing()
+    {
+        when(repository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> garage.deleteCar(99L))
+                .isInstanceOf(EntityNotFoundException.class)
+                .hasMessageContaining("99");
+        verify(repository, never()).delete(any(Car.class));
     }
 
     @Test

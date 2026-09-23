@@ -20,10 +20,12 @@ import java.util.List;
 @Component
 public class CurrencyClient {
     private final RestClient client;
-    public CurrencyClient(@Value("${currency.api.url}") String baseUrl,
+    public CurrencyClient(RestClient.Builder builder,
+                          @Value("${currency.api.url}") String baseUrl,
                           @Value("${currency.api.connect-timeout}") Duration connectTimeout,
                           @Value("${currency.api.read-timeout}") Duration readTimeout)
     {
+
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(connectTimeout)
                 .build();
@@ -31,7 +33,7 @@ public class CurrencyClient {
         factory.setReadTimeout(readTimeout);
         var jsonConverter = new JacksonJsonHttpMessageConverter();
         jsonConverter.setSupportedMediaTypes(List.of(MediaType.APPLICATION_JSON,MediaType.parseMediaType("application/javascript")));
-        this.client = RestClient.builder()
+        this.client = builder
                 .baseUrl(baseUrl)
                 .requestFactory(factory)
                 .configureMessageConverters(c -> c.withJsonConverter(jsonConverter))

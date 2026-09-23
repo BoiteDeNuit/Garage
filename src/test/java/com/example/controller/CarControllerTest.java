@@ -14,9 +14,12 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.ObjectMapper;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -65,5 +68,45 @@ class CarControllerTest {
 
         verify(service, never()).addCar(any());
 
+    }
+
+    @Test
+    void returns400WhenIdIsNotNumber() throws Exception {
+        mockMvc.perform(get("/api/cars/abc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("abc")));
+    }
+
+    @Test
+    void returns405ForUnsupportedMethod() throws Exception {
+        mockMvc.perform(put("/api/cars/1"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.status").value(405));
+    }
+
+    @Test
+    void returns404ForUnknownPath() throws Exception {
+        mockMvc.perform(get("/api/nothing"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value(containsString("/api/nothing")));
+    }
+
+    @Test
+    void returns415ForNonJsonBody() throws Exception {
+        mockMvc.perform(post("/api/cars")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("text"))
+                .andExpect(status().isUnsupportedMediaType());
+
+        verify(service, never()).addCar(any());
+    }
+
+    @Test
+    void returns404WhenDeletingMissingCar() throws Exception {
+        doThrow(new EntityNotFoundException("Машина с id: 99 не найдена")).when(service).deleteCar(99L);
+
+        mockMvc.perform(delete("/api/cars/99"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Машина с id: 99 не найдена"));
     }
 }

@@ -18,6 +18,10 @@ spring:
       port: 6379
       timeout: 500ms
       connect-timeout: 1s
+  cache:
+    cache-names: cars
+    redis:
+      enable-statistics: true
   datasource:
     url: jdbc:postgresql://localhost:5433/garage
   flyway:
@@ -40,6 +44,10 @@ currency:
     connect-timeout: 3s
     read-timeout: 5s
 management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
   endpoint:
     health:
       probes:

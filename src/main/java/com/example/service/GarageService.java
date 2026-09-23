@@ -9,6 +9,8 @@ import com.example.model.Car;
 import com.example.model.Owner;
 import com.example.repository.CarJpaRepository;
 import com.example.repository.OwnerJpaRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -27,12 +29,23 @@ public class GarageService{
     private final OwnerJpaRepository ownerRepository;
     private final CurrencyClient currencyClient;
     private final KafkaTemplate<Long,CarCreatedEvent> kafkaTemplate;
-    public GarageService (CarJpaRepository repository, OwnerJpaRepository ownerRepository,CurrencyClient currencyClient,KafkaTemplate<Long, CarCreatedEvent> kafkaTemplate)
+    private final MeterRegistry meterRegistry;
+    private final Counter carsCreated;
+    public GarageService (CarJpaRepository repository,
+                          OwnerJpaRepository ownerRepository,
+                          CurrencyClient currencyClient,
+                          KafkaTemplate<Long, CarCreatedEvent> kafkaTemplate,
+                          MeterRegistry meterRegistry
+                          )
     {
         this.repository=repository;
         this.ownerRepository=ownerRepository;
         this.currencyClient=currencyClient;
         this.kafkaTemplate=kafkaTemplate;
+        this.meterRegistry=meterRegistry;
+        this.carsCreated=Counter.builder("garage.cars.added")
+                .description("Машин добавлено в гараж")
+                .register(meterRegistry);
     }
     @Transactional
     public void demoNPlusOne(){
@@ -64,7 +77,7 @@ public class GarageService{
     {
         Car saved = repository.save(CarMapper.toCar(dto));
         kafkaTemplate.send(KafkaTopicsConfig.CAR_CREATED,saved.getId(), new CarCreatedEvent(saved.getId(), saved.getBrand(), saved.getModel(), Instant.now()));
-
+        carsCreated.increment();
         return CarMapper.toDto(saved);
     }
     @Cacheable(value = "cars",key = "#id")
@@ -101,9 +114,11 @@ public class GarageService{
        return repository.findAll().stream().map(CarMapper::toDto).toList();
     }
     @CacheEvict(value = "cars",key = "#id")
+    @Transactional
     public void deleteCar(Long id)
     {
-        repository.deleteById(id);
+        Car car = repository.findById(id).orElseThrow(() -> new EntityNotFoundException("Машина с id: " + id + " не найдена"));
+        repository.delete(car);
     }
     
     public CarPriceDto priceIn(Long id,String currency)

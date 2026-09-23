@@ -13,6 +13,8 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+
 import java.time.LocalDateTime;
 import java.util.stream.Collectors;
 
@@ -33,6 +35,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> unexpected(Exception e,HttpServletRequest request)
     {
+        if(e instanceof org.springframework.web.ErrorResponse springError)
+        {
+            HttpStatus status = HttpStatus.valueOf(springError.getStatusCode().value());
+            log.warn("Ошибка клиента метод: {} адрес: {} статус: {} ошибка: {}",request.getMethod(),request.getRequestURI(),status,e.getMessage());
+            String message = switch(status)
+            {
+                case NOT_FOUND -> "Путь " + request.getRequestURI() + " не найден";
+                case METHOD_NOT_ALLOWED -> "Метод" + request.getMethod() + " не поддерживается для данного адреса";
+                case UNSUPPORTED_MEDIA_TYPE -> "Ожидается application/json";
+                default -> status.getReasonPhrase();
+            };
+            return build(status,message,request);
+        }
         log.error("Необработанная ошибка", e);
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "Внутренняя ошибка сервера", request);
     }
@@ -40,6 +55,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> badCredentials(AuthenticationException e, HttpServletRequest request)
     {
         return build(HttpStatus.UNAUTHORIZED,"Неверный логин или пароль",request);
+    }
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> mismatchArgument(MethodArgumentTypeMismatchException e, HttpServletRequest request)
+    {
+        String message = "Запрос " + request.getRequestURI() + " сформулирован неверно, необходимо: " + e.getName() + "прислали: " + e.getValue();
+        return build(HttpStatus.BAD_REQUEST,message,request);
     }
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> notReadable(HttpMessageNotReadableException e,HttpServletRequest request)

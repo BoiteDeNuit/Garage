@@ -7,6 +7,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClient;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -142,7 +143,7 @@ class CurrencyClientTest
     private CurrencyClient client(Duration readTimeout)
     {
         String url = "http://127.0.0.1:" + server.getAddress().getPort() + "/daily_json.js";
-        return new CurrencyClient(url, Duration.ofSeconds(1), readTimeout);
+        return new CurrencyClient(RestClient.builder(), url, Duration.ofSeconds(1), readTimeout);
     }
 
     private void respond(int status, String contentType, String body)

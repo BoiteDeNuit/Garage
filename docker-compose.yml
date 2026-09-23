@@ -94,6 +94,17 @@ services:
       timeout: 3s
       retries: 10
     restart: unless-stopped
+  prometheus:
+    image: prom/prometheus:v3.14.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    mem_limit: 256m
+    depends_on:
+      - app
+    restart: unless-stopped
 volumes:
   pgdata:
   kafkadata:
