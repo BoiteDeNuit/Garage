@@ -3,13 +3,16 @@ package com.example.controller;
 import com.example.dto.CarDto;
 import com.example.dto.CarPriceDto;
 import com.example.dto.GarageStats;
-import com.example.exception.StorageFullException;
 import com.example.service.GarageService;
 import jakarta.validation.Valid;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
+
 
 @RestController
 @RequestMapping("/api/cars")
@@ -17,12 +20,13 @@ public class CarController {
     private final GarageService garage;
     public CarController(GarageService garage) { this.garage=garage; }
     @GetMapping
-    public List<CarDto> all(@RequestParam(required = false) String brand) {
+    public Page<CarDto> all(@RequestParam(required = false) String brand,
+                            @ParameterObject @PageableDefault(size = 20,sort = "id") Pageable pageable) {
         if (brand == null)
         {
-            return garage.findAll();
+            return garage.findAll(pageable);
         }
-        return garage.findByBrand(brand);
+        return garage.findByBrand(brand,pageable);
     }
     @GetMapping ("/{id}")
     public CarDto one(@PathVariable Long id)
@@ -31,7 +35,7 @@ public class CarController {
     }
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public CarDto create(@Valid @RequestBody CarDto dto) throws StorageFullException
+    public CarDto create(@Valid @RequestBody CarDto dto)
     {
         return garage.addCar(dto);
     }

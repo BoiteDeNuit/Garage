@@ -4,12 +4,16 @@ import com.example.model.AppUser;
 import com.example.model.Car;
 import com.example.model.Owner;
 import com.example.model.Role;
+import jakarta.persistence.PersistenceException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -44,6 +48,36 @@ class PostgresRepositoryTest {
     }
 
     @Test
+    void userWithoutRoleIsRejected()
+    {
+        assertThatThrownBy(() -> entityManager.getEntityManager()
+                .createNativeQuery("insert into users (username, password_hash) values ('ghost', 'x')")
+                .executeUpdate())
+                .isInstanceOf(PersistenceException.class)
+                .hasMessageContaining("role");
+    }
+
+    @Test
+    void userWithUnknownRoleIsRejected()
+    {
+        assertThatThrownBy(() -> entityManager.getEntityManager()
+                .createNativeQuery("insert into users (username, password_hash, role) values ('ghost', 'x', 'SUPERUSER')")
+                .executeUpdate())
+                .isInstanceOf(PersistenceException.class)
+                .hasMessageContaining("chk_users_role");
+    }
+
+    @Test
+    void brandIndexUsesUpperLikeHibernate()
+    {
+        List<String> indexes = entityManager.getEntityManager()
+                .createNativeQuery("select indexname from pg_indexes where tablename = 'cars'")
+                .getResultList().stream().map(Object::toString).toList();
+
+        assertThat(indexes).contains("idx_cars_brand_upper").doesNotContain("idx_cars_brand");
+    }
+
+    @Test
     void savesAndReadsCarWithPrice()
     {
         Car car = new Car("Porsche", "Taycan", "EV", 700, 2024);
@@ -64,9 +98,45 @@ class PostgresRepositoryTest {
         carRepository.save(new Car("BMW", "M4", "S58", 510, 2024));
         entityManager.flush();
 
-        assertThat(carRepository.findByBrandIgnoreCase("toyota"))
+        assertThat(carRepository.findByBrandIgnoreCase("toyota", PageRequest.of(0, 10)).getContent())
                 .extracting(Car::getModel)
                 .containsExactly("Supra");
+    }
+
+    @Test
+    void pagesAreSortedAndCounted()
+    {
+        carRepository.save(new Car("Toyota", "Supra", "2JZ", 320, 1998));
+        carRepository.save(new Car("BMW", "M4", "S58", 510, 2024));
+        carRepository.save(new Car("Lada", "Niva", "21214", 83, 2020));
+        entityManager.flush();
+
+        Page<Car> page = carRepository.findAll(PageRequest.of(0, 2, Sort.by("year")));
+
+        assertThat(page.getTotalElements()).isEqualTo(3);
+        assertThat(page.getTotalPages()).isEqualTo(2);
+        assertThat(page.getContent())
+                .extracting(Car::getYear)
+                .containsExactly(1998, 2020);
+    }
+
+    @Test
+    void aggregatesAreCalculatedByDatabase()
+    {
+        carRepository.save(new Car("Toyota", "Supra", "2JZ", 320, 1998));
+        carRepository.save(new Car("Porsche", "Taycan", "EV", 700, 2024));
+        carRepository.save(new Car("Lada", "Niva", "21214", 83, 2020));
+        entityManager.flush();
+
+        assertThat(carRepository.count()).isEqualTo(3);
+        assertThat(carRepository.averageHorsePower()).isCloseTo(367.67, within(0.01));
+        assertThat(carRepository.findFirstByOrderByHorsePowerDesc()).map(Car::getModel).contains("Taycan");
+    }
+
+    @Test
+    void averageOfEmptyGarageIsZero()
+    {
+        assertThat(carRepository.averageHorsePower()).isZero();
     }
 
     @Test

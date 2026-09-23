@@ -18,6 +18,10 @@ spring:
       port: 6379
       timeout: 500ms
       connect-timeout: 1s
+    web:
+        pageable:
+          max-page-size: 100
+          serialization-mode: via-dto
   cache:
     cache-names: cars
     redis:

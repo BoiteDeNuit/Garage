@@ -1,12 +1,11 @@
 package com.example.model;
 
 import jakarta.persistence.*;
-
 import java.math.BigDecimal;
 import java.util.Objects;
 @Entity
 @Table(name = "cars")
-public class Car implements Identifiable {
+public class Car{
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -28,11 +27,9 @@ public class Car implements Identifiable {
         this.model=model;
         this.horsePower=horsePower;
     }
-    @Override
     public void setId(Long id) {
         this.id = id;
     }
-    @Override
     public Long getId()
     {
         return id;
@@ -64,10 +61,10 @@ public class Car implements Identifiable {
         if(this == o) return true;
         if(o == null || getClass() != o.getClass()) return false;
         Car car = (Car) o;
-        return year == car.year
-                && brand.equals(car.brand)
-                && model.equals(car.model)
-                && engineCode.equals(car.engineCode);
+        return Objects.equals(engineCode,car.engineCode)
+                && Objects.equals(year,car.year)
+                && Objects.equals(brand,car.brand)
+                && Objects.equals(model,car.model);
     }
     @Override
     public int hashCode()

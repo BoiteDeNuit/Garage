@@ -4,14 +4,13 @@ import com.example.client.CurrencyClient;
 import com.example.config.KafkaTopicsConfig;
 import com.example.dto.CarDto;
 import com.example.dto.CarPriceDto;
+import com.example.dto.GarageStats;
 import com.example.event.CarCreatedEvent;
 import com.example.exception.EntityNotFoundException;
 import com.example.model.Car;
 import com.example.repository.CarJpaRepository;
-import com.example.repository.OwnerJpaRepository;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -19,26 +18,26 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.kafka.core.KafkaTemplate;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class GarageServiceTest {
     @Mock
     private CarJpaRepository repository;
-    @Mock
-    private OwnerJpaRepository ownerJpaRepository;
     @Mock
     private CurrencyClient currencyClient;
     @Mock
@@ -110,6 +109,48 @@ class GarageServiceTest {
         garage.addCar(new CarDto(null, "Toyota", "Chaser", "1JZ", 280, 1998, null));
 
         assertThat(registry.get("garage.cars.added").counter().count()).isEqualTo(1.0);
+    }
+
+    @Test
+    void findAllMapsPageToDto()
+    {
+        Car car = new Car("Toyota", "Supra", "2JZ", 320, 1998);
+        car.setId(1L);
+        Pageable pageable = PageRequest.of(0, 20);
+        when(repository.findAll(pageable)).thenReturn(new PageImpl<>(List.of(car), pageable, 1));
+
+        Page<CarDto> result = garage.findAll(pageable);
+
+        assertThat(result.getContent()).extracting(CarDto::brand).containsExactly("Toyota");
+        assertThat(result.getTotalElements()).isEqualTo(1);
+    }
+
+    @Test
+    void statsOfEmptyGarage()
+    {
+        when(repository.count()).thenReturn(0L);
+        when(repository.averageHorsePower()).thenReturn(0.0);
+        when(repository.findFirstByOrderByHorsePowerDesc()).thenReturn(Optional.empty());
+
+        GarageStats stats = garage.stats();
+
+        assertThat(stats.count()).isZero();
+        assertThat(stats.averageHp()).isZero();
+        assertThat(stats.strongestModel()).isEqualTo("Гараж пуст");
+    }
+
+    @Test
+    void statsTakesAggregatesFromDatabase()
+    {
+        Car strongest = new Car("Porsche", "Taycan", "EV", 700, 2024);
+        when(repository.count()).thenReturn(3L);
+        when(repository.averageHorsePower()).thenReturn(400.0);
+        when(repository.findFirstByOrderByHorsePowerDesc()).thenReturn(Optional.of(strongest));
+
+        GarageStats stats = garage.stats();
+
+        assertThat(stats).isEqualTo(new GarageStats(3, 400.0, "Taycan"));
+        verify(repository, never()).findAll();
     }
 
     @Test

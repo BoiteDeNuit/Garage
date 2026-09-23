@@ -6,14 +6,22 @@ import com.example.security.JwtAuthFilter;
 import com.example.security.SecurityErrorWriter;
 import com.example.service.GarageService;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -68,6 +76,30 @@ class CarControllerTest {
 
         verify(service, never()).addCar(any());
 
+    }
+
+    @Test
+    void returnsPageOfCars() throws Exception {
+        CarDto car = new CarDto(1L, "Toyota", "Supra", "2JZ", 320, 1998, null);
+        when(service.findAll(any(Pageable.class))).thenReturn(new PageImpl<>(List.of(car), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/cars"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].brand").value("Toyota"))
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.page.size").value(20));
+    }
+
+    @Test
+    void limitsPageSizeToMaximum() throws Exception {
+        when(service.findAll(any(Pageable.class))).thenReturn(Page.empty());
+
+        mockMvc.perform(get("/api/cars").param("size", "1000"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(service).findAll(captor.capture());
+        assertThat(captor.getValue().getPageSize()).isEqualTo(100);
     }
 
     @Test

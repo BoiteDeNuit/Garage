@@ -2,17 +2,20 @@ package com.example.service;
 
 import com.example.client.CurrencyClient;
 import com.example.config.KafkaTopicsConfig;
-import com.example.dto.*;
+import com.example.dto.CarDto;
+import com.example.dto.CarMapper;
+import com.example.dto.CarPriceDto;
+import com.example.dto.GarageStats;
 import com.example.event.CarCreatedEvent;
 import com.example.exception.EntityNotFoundException;
 import com.example.model.Car;
-import com.example.model.Owner;
 import com.example.repository.CarJpaRepository;
-import com.example.repository.OwnerJpaRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,26 +23,21 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
-import java.util.Comparator;
-import java.util.List;
-import java.util.function.Predicate;
+
 @Service
 public class GarageService{
     private final CarJpaRepository repository;
-    private final OwnerJpaRepository ownerRepository;
     private final CurrencyClient currencyClient;
     private final KafkaTemplate<Long,CarCreatedEvent> kafkaTemplate;
     private final MeterRegistry meterRegistry;
     private final Counter carsCreated;
     public GarageService (CarJpaRepository repository,
-                          OwnerJpaRepository ownerRepository,
                           CurrencyClient currencyClient,
                           KafkaTemplate<Long, CarCreatedEvent> kafkaTemplate,
                           MeterRegistry meterRegistry
                           )
     {
         this.repository=repository;
-        this.ownerRepository=ownerRepository;
         this.currencyClient=currencyClient;
         this.kafkaTemplate=kafkaTemplate;
         this.meterRegistry=meterRegistry;
@@ -48,31 +46,6 @@ public class GarageService{
                 .register(meterRegistry);
     }
     @Transactional
-    public void demoNPlusOne(){
-        List<Owner> owners = ownerRepository.findAll();
-        for(Owner owner : owners)
-        {
-            System.out.println(owner.getName() +" " + owner.getCars().size() + " Машин");
-        }
-    }
-    @Transactional(readOnly = true)
-    public OwnerDto getOwner(Long id)
-    {
-        Owner owner = ownerRepository.findById(id).orElseThrow();
-        OwnerDto dto = new OwnerDto(id,owner.getName(), owner.getCity(), owner.getCars().size());
-        return dto;
-    }
-    @Transactional
-    @CacheEvict(value = "cars",key = "#carId")
-    public void raisePower(Long carId, int delta)
-    {
-        Car car = repository.findById(carId).orElseThrow();
-        car.setHorsePower(car.getHorsePower() + delta);
-    }
-    public List<Owner> findAllOwners()
-    {
-        return ownerRepository.findAll();
-    }
     public CarDto addCar (CarDto dto)
     {
         Car saved = repository.save(CarMapper.toCar(dto));
@@ -81,37 +54,30 @@ public class GarageService{
         return CarMapper.toDto(saved);
     }
     @Cacheable(value = "cars",key = "#id")
+    @Transactional(readOnly = true)
     public CarDto getCar(Long id)
     {
         return repository.findById(id).
                 map(CarMapper::toDto)
                 .orElseThrow(() -> new EntityNotFoundException("Машина с id: " + id + " не найдена"));
     }
-
+    @Transactional(readOnly = true)
     public GarageStats stats()
     {
-        List<Car> all = repository.findAll();
-        int count = all.size();
-        double averageHp = all.stream()
-                .mapToInt(Car::getHorsePower)
-                .average()
-                .orElse(0);
-        String strongestModel = all.stream()
-                .max(Comparator.comparingInt(Car::getHorsePower))
-                .map(Car::getModel).orElse("гараж пуст");
+        long count = repository.count();
+        double averageHp = repository.averageHorsePower();
+        String strongestModel = repository.findFirstByOrderByHorsePowerDesc().map(Car::getModel).orElse("Гараж пуст");
         return new GarageStats(count,averageHp,strongestModel);
     }
-    private List<CarDto> findBy(Predicate<Car> condition)
+    @Transactional(readOnly = true)
+    public Page<CarDto> findByBrand(String brand, Pageable pageable)
     {
-        return repository.findAll().stream().filter(condition).map(CarMapper::toDto).toList();
+        return repository.findByBrandIgnoreCase(brand,pageable).map(CarMapper::toDto);
     }
-    public List<CarDto> findByBrand(String brand)
+    @Transactional(readOnly = true)
+    public Page<CarDto> findAll(Pageable pageable)
     {
-        return repository.findByBrandIgnoreCase(brand).stream().map(CarMapper::toDto).toList();
-    }
-    public List<CarDto> findAll()
-    {
-       return repository.findAll().stream().map(CarMapper::toDto).toList();
+       return repository.findAll(pageable).map(CarMapper::toDto);
     }
     @CacheEvict(value = "cars",key = "#id")
     @Transactional

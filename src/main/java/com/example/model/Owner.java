@@ -1,14 +1,12 @@
 package com.example.model;
 
-import com.example.dto.CarMapper;
 import jakarta.persistence.*;
-
 import java.util.ArrayList;
 import java.util.List;
 
 @Entity
 @Table(name = "owners")
-public class Owner implements Identifiable {
+public class Owner {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -21,11 +19,9 @@ public class Owner implements Identifiable {
         this.city = city;
         this.name = name;
     }
-    @Override
     public void setId(Long id) {
         this.id = id;
     }
-    @Override
     public Long getId()
     {
         return id;

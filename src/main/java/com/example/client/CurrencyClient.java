@@ -10,7 +10,6 @@ import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
-
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.http.HttpClient;
