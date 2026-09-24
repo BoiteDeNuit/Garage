@@ -6,6 +6,9 @@ import com.example.dto.LoginResponse;
 import com.example.exception.TooManyRequestsException;
 import com.example.ratelimit.RateLimiter;
 import com.example.security.JwtService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-
+@Tag(name = "Аутентификация",description = "Логин,Проверка роли")
 @RestController
 @RequestMapping("/auth")
 public class AuthController {
@@ -38,6 +41,10 @@ public class AuthController {
         this.rateLimiter=rateLimiter;
         this.loginLimit=loginLimit;
     }
+    @Operation(summary = "Получить токен")
+    @ApiResponse(responseCode = "200", description = "OK")
+    @ApiResponse(responseCode = "401", description = "Неверный логин или пароль")
+    @ApiResponse(responseCode = "429", description = "Больше 5 попыток в минуту")
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest)
     {

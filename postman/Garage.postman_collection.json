@@ -1,0 +1,257 @@
+{
+  "info": {
+    "name": "Garage",
+    "description": "Логин и весь цикл машины. Запускать целиком через Run",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{token}}", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "token", "value": "" },
+    { "key": "carId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Логин",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set(\"token\", pm.response.json().token);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "Добавить машину",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"201\", () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set(\"carId\", pm.response.json().id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"price\": 4500000\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/cars",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "cars"]
+        }
+      }
+    },
+    {
+      "name": "Машина по id",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Supra\", () => pm.expect(pm.response.json().model).to.eql(\"Supra\"));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/cars/{{carId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "cars", "{{carId}}"]
+        }
+      }
+    },
+    {
+      "name": "Список по бренду",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"по 5 на странице\", () => pm.expect(pm.response.json().page.size).to.eql(5));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/cars?brand=toyota&page=0&size=5&sort=year,desc",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "cars"],
+          "query": [
+            { "key": "brand", "value": "toyota" },
+            { "key": "page", "value": "0" },
+            { "key": "size", "value": "5" },
+            { "key": "sort", "value": "year,desc" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Цена в USD",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"USD\", () => pm.expect(pm.response.json().currency).to.eql(\"USD\"));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/cars/{{carId}}/price?currency=USD",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "cars", "{{carId}}", "price"],
+          "query": [
+            { "key": "currency", "value": "USD" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Статистика",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/cars/stats",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "cars", "stats"]
+        }
+      }
+    },
+    {
+      "name": "Без токена",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"401\", () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/cars/{{carId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "cars", "{{carId}}"]
+        }
+      }
+    },
+    {
+      "name": "Удалить машину",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"204\", () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/cars/{{carId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "cars", "{{carId}}"]
+        }
+      }
+    },
+    {
+      "name": "Удалённая машина",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"404\", () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/cars/{{carId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "cars", "{{carId}}"]
+        }
+      }
+    }
+  ]
+}
