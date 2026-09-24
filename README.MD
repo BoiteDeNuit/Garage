@@ -19,7 +19,7 @@ Docker compose, GitHub Actions.
 cp .env.example .env
 ```
 
-В `.env` заполнить `DB_PASSWORD` и `JWT_SECRET`. Секрет не короче 32 символов:
+В `.env` заполнить `DB_PASSWORD`, `JWT_SECRET` и `ADMIN_PASSWORD`. Секрет не короче 32 символов:
 
 ```bash
 openssl rand -base64 48
@@ -41,12 +41,13 @@ docker compose up -d --build
 
 ## Авторизация
 
-Flyway создаёт пользователя `admin` с паролем `admin`. Перед деплоем пароль сменить.
+Администратора приложение создаёт при старте из `ADMIN_USERNAME` и `ADMIN_PASSWORD`.
+Поменял пароль в `.env` и перезапустил: пароль обновится. Без них приложение не стартует.
 
 ```bash
 curl -X POST localhost:8080/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"admin"}'
+  -d '{"username":"<логин>","password":"<пароль>"}'
 ```
 
 Токен из ответа передаётся в заголовке `Authorization: Bearer <токен>`. Живёт 30 минут.
@@ -86,7 +87,7 @@ curl -X POST localhost:8080/auth/login \
 ## Как устроено
 
 - Сущности не выходят из сервиса. Наружу только DTO на `record`.
-- Схему базы ведёт Flyway (V1–V6). Hibernate её только проверяет (`ddl-auto: validate`).
+- Схему базы ведёт Flyway (V1–V7). Hibernate её только проверяет (`ddl-auto: validate`).
 - Новая машина публикует событие в топик `car-created`. Его читают две группы: `notifications` и `analytics`.
 - Машина по id кэшируется в Redis на 10 минут. Без Redis приложение работает дальше:
   кэш просто промахивается, а лимит входа не действует.
@@ -114,14 +115,15 @@ curl -X POST localhost:8080/auth/login \
 ```
 
 Нужен запущенный Docker: часть тестов поднимает контейнеры через Testcontainers.
-54 теста: unit на Mockito, контроллер через `@WebMvcTest`, клиент ЦБ на встроенном
+58 тестов: unit на Mockito, контроллер через `@WebMvcTest`, клиент ЦБ на встроенном
 `HttpServer`, репозитории на настоящем Postgres и полный контекст с Postgres, Kafka и Redis.
 CI гоняет их на каждый push в `main` и на каждый PR.
 
 ## Postman
 
-`postman/Garage.postman_collection.json`: импорт и Run. Коллекция проходит весь путь
-от логина до удаления машины и убирает за собой.
+`postman/Garage.postman_collection.json`: импорт, в переменных коллекции заполнить
+`username` и `password`, затем Run. Коллекция проходит весь путь от логина до удаления
+машины и убирает за собой.
 
 ## Структура
 

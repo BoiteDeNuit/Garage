@@ -10,6 +10,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_PROFILES_ACTIVE: dev
       JWT_SECRET: ${JWT_SECRET}
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       CURRENCY_API_URL: ${CURRENCY_API_URL}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_DATA_REDIS_HOST: redis
@@ -23,7 +25,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
   kafka:
-    image: confluentinc/cp-kafka:latest
+    image: confluentinc/cp-kafka:8.3.2
     container_name: kafka
     ports:
       - "9092:9092"

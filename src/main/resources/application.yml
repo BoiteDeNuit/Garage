@@ -39,6 +39,9 @@ spring:
     properties:
       hibernate:
         format_sql: true
+admin:
+  username: ${ADMIN_USERNAME}
+  password: ${ADMIN_PASSWORD}
 jwt:
   secret: ${JWT_SECRET}
   ttl-minutes: 30

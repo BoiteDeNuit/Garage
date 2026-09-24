@@ -1,9 +1,7 @@
 package com.example.repository;
 
-import com.example.model.AppUser;
 import com.example.model.Car;
 import com.example.model.Owner;
-import com.example.model.Role;
 import jakarta.persistence.PersistenceException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,11 +38,9 @@ class PostgresRepositoryTest {
     private TestEntityManager entityManager;
 
     @Test
-    void migrationsCreateAdmin()
+    void migrationsRemoveDefaultAdmin()
     {
-        AppUser admin = userRepository.findByUsername("admin").orElseThrow();
-        assertThat(admin.getRole()).isEqualTo(Role.ADMIN);
-        assertThat(admin.getPasswordHash()).startsWith("$2a$");
+        assertThat(userRepository.findByUsername("admin")).isEmpty();
     }
 
     @Test

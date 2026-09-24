@@ -37,6 +37,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(properties = {
         "jwt.secret=garage-test-secret-garage-test-secret",
+        "admin.username=boss",
+        "admin.password=boss-password",
         "currency.api.url=http://localhost:1"
 })
 @AutoConfigureMockMvc
@@ -94,7 +96,7 @@ class GarageApplicationTests {
     {
         mockMvc.perform(post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new LoginRequest("admin", "wrong"))))
+                        .content(objectMapper.writeValueAsString(new LoginRequest("boss", "wrong"))))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -133,7 +135,7 @@ class GarageApplicationTests {
     {
         String body = mockMvc.perform(post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new LoginRequest("admin", "admin"))))
+                        .content(objectMapper.writeValueAsString(new LoginRequest("boss", "boss-password"))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readValue(body, LoginResponse.class).token();

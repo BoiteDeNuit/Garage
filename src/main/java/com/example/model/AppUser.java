@@ -15,6 +15,16 @@ public class AppUser {
     @Enumerated(EnumType.STRING)
     private Role role;
     protected AppUser () {}
+    public AppUser(String username, String passwordHash, Role role)
+    {
+        this.username = username;
+        this.passwordHash = passwordHash;
+        this.role = role;
+    }
+    public void changePassword(String passwordHash)
+    {
+        this.passwordHash = passwordHash;
+    }
 
     public Long getId() {
         return id;
