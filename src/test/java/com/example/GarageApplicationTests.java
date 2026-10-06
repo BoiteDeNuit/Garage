@@ -4,22 +4,11 @@ import com.example.dto.CarDto;
 import com.example.dto.LoginRequest;
 import com.example.dto.LoginResponse;
 import com.example.event.CarCreatedEvent;
-import com.example.listener.NotificationsListener;
+import com.example.security.JwtService;
+import com.example.support.IntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
-import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.kafka.ConfluentKafkaContainer;
-import org.testcontainers.postgresql.PostgreSQLContainer;
-import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 
@@ -35,32 +24,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(properties = {
-        "jwt.secret=garage-test-secret-garage-test-secret",
-        "admin.username=boss",
-        "admin.password=boss-password",
-        "currency.api.url=http://localhost:1"
-})
-@AutoConfigureMockMvc
-@Testcontainers
-class GarageApplicationTests {
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:16");
-    @Container
-    @ServiceConnection
-    static ConfluentKafkaContainer kafka = new ConfluentKafkaContainer("confluentinc/cp-kafka:8.3.2");
-    @Container
-    @ServiceConnection(name = "redis")
-    static GenericContainer<?> redis = new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
+class GarageApplicationTests extends IntegrationTest {
     @Autowired
-    MockMvc mockMvc;
-    @Autowired
-    ObjectMapper objectMapper;
-    @Autowired
-    StringRedisTemplate redisTemplate;
-    @MockitoSpyBean
-    NotificationsListener notificationsListener;
+    JwtService jwtService;
 
     @Test
     void adminCreatesReadsAndDeletesCar() throws Exception
@@ -128,7 +94,22 @@ class GarageApplicationTests {
     {
         mockMvc.perform(get("/actuator/prometheus"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("garage_cars_added_total")));
+                .andExpect(content().string(containsString("garage_cars_added_total")))
+                .andExpect(content().string(containsString("cache_gets_total{cache=\"cars\"")));
+    }
+
+    @Test
+    void loginTokenCarriesOnlyRoles() throws Exception
+    {
+        assertThat(jwtService.extractRoles(login())).containsExactly("ROLE_ADMIN");
+    }
+
+    @Test
+    void unknownSortFieldIs400() throws Exception
+    {
+        mockMvc.perform(get("/api/cars").param("sort", "foo"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Нельзя сортировать по полю: foo"));
     }
 
     private String login() throws Exception

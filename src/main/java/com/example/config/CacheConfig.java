@@ -3,6 +3,7 @@ package com.example.config;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.cache.autoconfigure.RedisCacheManagerBuilderCustomizer;
 import org.springframework.cache.Cache;
 import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.annotation.EnableCaching;
@@ -10,6 +11,8 @@ import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
+import org.springframework.data.redis.cache.RedisCacheWriter;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
@@ -33,6 +36,13 @@ public class CacheConfig implements CachingConfigurer {
         return RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(Duration.ofMinutes(10))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(serializer));
+    }
+    // Spring Data Redis 4 по умолчанию пишет в кэш асинхронно: ответ уходит раньше, чем Redis применил put или evict.
+    // Сразу после удаления можно было прочитать удалённую машину из кэша, а ошибки записи не доходили до errorHandler
+    @Bean
+    public RedisCacheManagerBuilderCustomizer immediateCacheWrites(RedisConnectionFactory connectionFactory)
+    {
+        return builder -> builder.cacheWriter(RedisCacheWriter.create(connectionFactory, writer -> writer.immediateWrites()));
     }
     @Override
     public CacheErrorHandler errorHandler() {

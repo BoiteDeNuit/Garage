@@ -106,14 +106,15 @@ class CarControllerTest {
     void returns400WhenIdIsNotNumber() throws Exception {
         mockMvc.perform(get("/api/cars/abc"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value(containsString("abc")));
+                .andExpect(jsonPath("$.message").value(containsString("id, прислали: abc")));
     }
 
     @Test
     void returns405ForUnsupportedMethod() throws Exception {
         mockMvc.perform(put("/api/cars/1"))
                 .andExpect(status().isMethodNotAllowed())
-                .andExpect(jsonPath("$.status").value(405));
+                .andExpect(jsonPath("$.status").value(405))
+                .andExpect(jsonPath("$.message").value("Метод PUT не поддерживается для данного адреса"));
     }
 
     @Test

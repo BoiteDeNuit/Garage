@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.example.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -41,7 +42,7 @@ public class GlobalExceptionHandler {
             String message = switch(status)
             {
                 case NOT_FOUND -> "Путь " + request.getRequestURI() + " не найден";
-                case METHOD_NOT_ALLOWED -> "Метод" + request.getMethod() + " не поддерживается для данного адреса";
+                case METHOD_NOT_ALLOWED -> "Метод " + request.getMethod() + " не поддерживается для данного адреса";
                 case UNSUPPORTED_MEDIA_TYPE -> "Ожидается application/json";
                 default -> status.getReasonPhrase();
             };
@@ -58,13 +59,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> mismatchArgument(MethodArgumentTypeMismatchException e, HttpServletRequest request)
     {
-        String message = "Запрос " + request.getRequestURI() + " сформулирован неверно, необходимо: " + e.getName() + "прислали: " + e.getValue();
+        String message = "Запрос " + request.getRequestURI() + " сформулирован неверно, необходимо: " + e.getName() + ", прислали: " + e.getValue();
         return build(HttpStatus.BAD_REQUEST,message,request);
     }
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> notReadable(HttpMessageNotReadableException e,HttpServletRequest request)
     {
         return build(HttpStatus.BAD_REQUEST,"Некорректный формат запроса",request);
+    }
+    @ExceptionHandler(PropertyReferenceException.class)
+    public ResponseEntity<ErrorResponse> unknownSortField(PropertyReferenceException e, HttpServletRequest request)
+    {
+        return build(HttpStatus.BAD_REQUEST,"Нельзя сортировать по полю: " + e.getPropertyName(),request);
     }
     @ExceptionHandler(ExternalServiceException.class)
     public ResponseEntity<ErrorResponse> currencyServiceUnavailable(ExternalServiceException e, HttpServletRequest request)

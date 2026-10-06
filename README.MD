@@ -8,7 +8,7 @@ REST API для учёта машин. Начинался как консоль�
 ## Стек
 
 Java 21, Spring Boot 4.1, Spring Security, Hibernate 7, PostgreSQL 16, Flyway, Kafka (KRaft),
-Redis 7, springdoc-openapi, Micrometer + Prometheus, JUnit 5, Mockito, Testcontainers,
+Redis 7, springdoc-openapi, Micrometer + Prometheus, JUnit 6, Mockito, Testcontainers,
 Docker compose, GitHub Actions.
 
 ## Запуск
@@ -67,6 +67,7 @@ curl -X POST localhost:8080/auth/login \
 | GET | `/api/cars/{id}/price?currency=USD` | все | цена по курсу ЦБ |
 
 Пагинация: `?page=0&size=20&sort=year,desc`. Больше 100 на страницу не отдаётся.
+Сортировка по несуществующему полю даёт 400.
 
 Все ошибки приходят в одном формате:
 
@@ -91,6 +92,9 @@ curl -X POST localhost:8080/auth/login \
 - Новая машина публикует событие в топик `car-created`. Его читают две группы: `notifications` и `analytics`.
 - Машина по id кэшируется в Redis на 10 минут. Без Redis приложение работает дальше:
   кэш просто промахивается, а лимит входа не действует.
+- Запись в кэш синхронная (`immediateWrites`). Spring Data Redis 4 по умолчанию пишет асинхронно:
+  сразу после удаления GET иногда отдавал удалённую машину из кэша. Тесты кэша падали
+  примерно в каждом четвёртом прогоне.
 - Курс берётся с зеркала ЦБ `cbr-xml-daily.ru`. Таймауты 3 с на подключение и 5 с на чтение.
   Если ЦБ не ответил, клиент получит 503.
 - Статистика считается агрегатами в SQL.
@@ -115,7 +119,7 @@ curl -X POST localhost:8080/auth/login \
 ```
 
 Нужен запущенный Docker: часть тестов поднимает контейнеры через Testcontainers.
-58 тестов: unit на Mockito, контроллер через `@WebMvcTest`, клиент ЦБ на встроенном
+60 тестов: unit на Mockito, контроллер через `@WebMvcTest`, клиент ЦБ на встроенном
 `HttpServer`, репозитории на настоящем Postgres и полный контекст с Postgres, Kafka и Redis.
 CI гоняет их на каждый push в `main` и на каждый PR.
 

@@ -54,7 +54,8 @@ public class AuthController {
             throw new TooManyRequestsException("Слишком много попыток");
         }
         Authentication auth = authManager.authenticate(new UsernamePasswordAuthenticationToken(request.username(),request.password()));
-        List<String> roles = auth.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList();
+        // Security 7 добавляет к ролям фактор входа FACTOR_PASSWORD, в токен он не нужен
+        List<String> roles = auth.getAuthorities().stream().map(GrantedAuthority::getAuthority).filter(role -> role.startsWith("ROLE_")).toList();
         return new LoginResponse(service.generateToken(auth.getName(),roles));
     }
 
