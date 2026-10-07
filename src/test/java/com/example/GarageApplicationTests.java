@@ -1,6 +1,5 @@
 package com.example;
 
-import com.example.config.KafkaTopicsConfig;
 import com.example.dto.ListingDto;
 import com.example.dto.ListingRequest;
 import com.example.dto.LoginRequest;
@@ -9,14 +8,21 @@ import com.example.event.ListingPublishedEvent;
 import com.example.model.AppUser;
 import com.example.model.ListingStatus;
 import com.example.model.Role;
+import com.example.service.ListingService;
 import com.example.support.IntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.Ordered;
 import org.springframework.http.MediaType;
-import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.aop.Advisor;
+import org.springframework.aop.framework.Advised;
+import org.springframework.cache.interceptor.BeanFactoryCacheOperationSourceAdvisor;
+import org.springframework.transaction.interceptor.BeanFactoryTransactionAttributeSourceAdvisor;
 
 import java.math.BigDecimal;
-import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -32,7 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class GarageApplicationTests extends IntegrationTest {
     @Autowired
-    KafkaTemplate<Long, ListingPublishedEvent> kafkaTemplate;
+    ListingService listingService;
 
     @Test
     void sellerCreatesDraftVisibleOnlyToSellerAndAdmin() throws Exception
@@ -187,14 +193,94 @@ class GarageApplicationTests extends IntegrationTest {
     }
 
     @Test
-    void publishedEventReachesKafkaListener()
+    void listingLifecycleThroughApi() throws Exception
     {
-        ListingPublishedEvent event = new ListingPublishedEvent(777L, 1L, "Toyota", "Supra", new BigDecimal("4500000"), Instant.now());
+        AppUser seller = createUser(Role.USER);
+        AppUser stranger = createUser(Role.USER);
+        String brand = uniqueBrand();
+        Long withoutPrice = create(seller, new ListingRequest(brand, "Supra", "2JZ", 320, 1998, 154000, null, "Самара", null));
+        change(withoutPrice, "publish", seller)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Для публикации нужна цена"));
 
-        kafkaTemplate.send(KafkaTopicsConfig.LISTING_PUBLISHED, event.listingId(), event);
+        Long id = create(seller, supra(brand));
+        change(id, "publish", stranger).andExpect(status().isNotFound());
+        change(id, "publish", seller)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.publishedAt").isNotEmpty())
+                .andExpect(jsonPath("$.version").value(1));
+        mockMvc.perform(get("/api/listings/" + id)).andExpect(status().isOk());
 
-        verify(notificationsListener, timeout(15000))
-                .onListingPublished(argThat((ListingPublishedEvent received) -> received.listingId().equals(777L)));
+        change(id, "sold", stranger)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Недостаточно прав"));
+        change(id, "publish", seller)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Нельзя перевести объявление из ACTIVE в ACTIVE"));
+        change(id, "sold", admin()).andExpect(status().isForbidden());
+        change(id, "archive", stranger).andExpect(status().isForbidden());
+        change(id, "archive", admin())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ARCHIVED"));
+        mockMvc.perform(get("/api/listings/" + id)).andExpect(status().isNotFound());
+
+        change(id, "publish", seller).andExpect(status().isOk());
+        change(id, "sold", seller)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SOLD"));
+        change(id, "archive", seller).andExpect(status().isConflict());
+        mockMvc.perform(post("/api/listings/" + id + "/archive")).andExpect(status().isUnauthorized());
+
+        // две публикации: первая и повторная из архива
+        verify(notificationsListener, timeout(15000).times(2))
+                .onListingPublished(argThat((ListingPublishedEvent event) -> event.listingId().equals(id)));
+    }
+
+    @Test
+    void archiveEvictsCachedCard() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        Long id = insertListing(seller, uniqueBrand(), ListingStatus.ACTIVE);
+        mockMvc.perform(get("/api/listings/" + id)).andExpect(status().isOk());
+        assertThat(redisTemplate.hasKey("listings::" + id)).isTrue();
+
+        change(id, "archive", seller).andExpect(status().isOk());
+
+        assertThat(redisTemplate.hasKey("listings::" + id)).isFalse();
+        mockMvc.perform(get("/api/listings/" + id)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void publishAndSoldEvictCachedCard() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        Long archived = insertListing(seller, uniqueBrand(), ListingStatus.ARCHIVED);
+        mockMvc.perform(get("/api/listings/" + archived)).andExpect(status().isNotFound());
+        assertThat(redisTemplate.hasKey("listings::" + archived)).isTrue();
+
+        change(archived, "publish", seller).andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/listings/" + archived))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACTIVE"));
+        change(archived, "sold", seller).andExpect(status().isOk());
+        mockMvc.perform(get("/api/listings/" + archived))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SOLD"));
+    }
+
+    // Порядок задан явно, а не держится на том, в каком порядке Spring зарегистрировал конфигурации.
+    // Меньший order — внешний прокси: кэш снаружи транзакции, evict выполняется уже после коммита
+    @Test
+    void cacheProxyWrapsTransaction()
+    {
+        List<Advisor> advisors = Arrays.asList(((Advised) listingService).getAdvisors());
+        Advisor cache = advisors.stream().filter(BeanFactoryCacheOperationSourceAdvisor.class::isInstance).findFirst().orElseThrow();
+        Advisor transaction = advisors.stream().filter(BeanFactoryTransactionAttributeSourceAdvisor.class::isInstance).findFirst().orElseThrow();
+
+        assertThat(((Ordered) cache).getOrder()).isLessThan(((Ordered) transaction).getOrder());
+        assertThat(advisors.indexOf(cache)).isLessThan(advisors.indexOf(transaction));
     }
 
     @Test
@@ -203,7 +289,24 @@ class GarageApplicationTests extends IntegrationTest {
         mockMvc.perform(get("/actuator/prometheus"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("listings_added_total")))
+                .andExpect(content().string(containsString("listings_published_total")))
                 .andExpect(content().string(containsString("cache_gets_total{cache=\"listings\"")));
+    }
+
+    private Long create(AppUser seller, ListingRequest request) throws Exception
+    {
+        String body = mockMvc.perform(post("/api/listings")
+                        .header("Authorization", bearer(seller))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readValue(body, ListingDto.class).id();
+    }
+
+    private ResultActions change(Long id, String action, AppUser actor) throws Exception
+    {
+        return mockMvc.perform(post("/api/listings/" + id + "/" + action).header("Authorization", bearer(actor)));
     }
 
     private ListingRequest supra(String brand)

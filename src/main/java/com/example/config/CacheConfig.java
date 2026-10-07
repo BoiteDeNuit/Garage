@@ -10,6 +10,7 @@ import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheWriter;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -18,8 +19,11 @@ import org.springframework.data.redis.serializer.RedisSerializationContext;
 import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import java.time.Duration;
 
+// Кэш-прокси снаружи транзакционного (у того LOWEST_PRECEDENCE): @CacheEvict срабатывает после коммита.
+// Если сбрасывать до коммита, любой GET между сбросом и коммитом положит в кэш старую строку.
+// Узкая гонка остаётся: GET прочитал до коммита, а положил в кэш после сброса. Её ограничивает TTL в 10 минут
 @Configuration
-@EnableCaching
+@EnableCaching(order = Ordered.LOWEST_PRECEDENCE - 1)
 public class CacheConfig implements CachingConfigurer {
     private static final Logger log = LoggerFactory.getLogger(CacheConfig.class);
     @Bean

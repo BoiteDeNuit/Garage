@@ -1,5 +1,6 @@
 package com.example.model;
 
+import com.example.exception.ListingStateException;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -48,6 +49,41 @@ public class Listing {
         listing.updatedAt=now;
         listing.apply(details);
         return listing;
+    }
+    // Сначала все проверки, потом изменения: при отказе объект остаётся как был
+    public void publish(Instant now)
+    {
+        checkTransition(ListingStatus.ACTIVE);
+        if(price == null)
+        {
+            throw ListingStateException.priceRequired();
+        }
+        if(city == null || city.isBlank())
+        {
+            throw ListingStateException.cityRequired();
+        }
+        this.status=ListingStatus.ACTIVE;
+        this.publishedAt=now;
+        this.updatedAt=now;
+    }
+    public void markSold(Instant now)
+    {
+        checkTransition(ListingStatus.SOLD);
+        this.status=ListingStatus.SOLD;
+        this.updatedAt=now;
+    }
+    public void archive(Instant now)
+    {
+        checkTransition(ListingStatus.ARCHIVED);
+        this.status=ListingStatus.ARCHIVED;
+        this.updatedAt=now;
+    }
+    private void checkTransition(ListingStatus target)
+    {
+        if(!status.canTransitionTo(target))
+        {
+            throw ListingStateException.transition(status, target);
+        }
     }
     private void apply(ListingDetails details)
     {

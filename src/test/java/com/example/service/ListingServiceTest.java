@@ -5,7 +5,9 @@ import com.example.dto.ListingDto;
 import com.example.dto.ListingPriceDto;
 import com.example.dto.ListingRequest;
 import com.example.dto.ListingStats;
+import com.example.event.ListingPublishedEvent;
 import com.example.exception.EntityNotFoundException;
+import com.example.exception.ListingStateException;
 import com.example.model.AppUser;
 import com.example.model.Listing;
 import com.example.model.ListingDetails;
@@ -22,10 +24,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -54,6 +58,8 @@ class ListingServiceTest {
     private ListingReader reader;
     @Mock
     private CurrencyClient currencyClient;
+    @Mock
+    private ApplicationEventPublisher events;
     private final MeterRegistry registry = new SimpleMeterRegistry();
     private ListingService service;
 
@@ -61,7 +67,7 @@ class ListingServiceTest {
     @BeforeEach
     void setUp()
     {
-        service = new ListingService(repository, users, reader, currencyClient, registry, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new ListingService(repository, users, reader, currencyClient, events, registry, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -143,6 +149,154 @@ class ListingServiceTest {
         when(reader.findCard(1L)).thenReturn(card(ListingStatus.DRAFT, Long.valueOf(1000)));
 
         assertThat(service.get(1L, principal(Long.valueOf(1000), Role.USER)).status()).isEqualTo(ListingStatus.DRAFT);
+    }
+
+    @Test
+    void sellerPublishesDraftAndEventIsSent()
+    {
+        Listing draft = listing();
+        when(repository.findById(1L)).thenReturn(Optional.of(draft));
+        when(repository.saveAndFlush(draft)).thenReturn(draft);
+
+        ListingDto result = service.publish(1L, principal(7L, Role.USER));
+
+        assertThat(result.status()).isEqualTo(ListingStatus.ACTIVE);
+        assertThat(result.publishedAt()).isEqualTo(NOW);
+        verify(events).publishEvent(new ListingPublishedEvent(1L, 7L, "Toyota", "Supra", new BigDecimal("4500000.00"), NOW));
+    }
+
+    @Test
+    void republishFromArchiveSendsEventAgain()
+    {
+        Listing listing = listing();
+        listing.publish(NOW.minusSeconds(3600));
+        listing.archive(NOW.minusSeconds(60));
+        when(repository.findById(1L)).thenReturn(Optional.of(listing));
+        when(repository.saveAndFlush(listing)).thenReturn(listing);
+
+        service.publish(1L, principal(7L, Role.USER));
+
+        verify(events).publishEvent(new ListingPublishedEvent(1L, 7L, "Toyota", "Supra", new BigDecimal("4500000.00"), NOW));
+    }
+
+    @Test
+    void rejectedPublishSendsNoEvent()
+    {
+        Listing withoutPrice = Listing.draft(user(7L), new ListingDetails("Lada", "Niva", "21214", 83, 2020, 50000, null, "Самара", null), NOW);
+        when(repository.findById(1L)).thenReturn(Optional.of(withoutPrice));
+
+        assertThatThrownBy(() -> service.publish(1L, principal(7L, Role.USER)))
+                .isInstanceOf(ListingStateException.class)
+                .hasMessage("Для публикации нужна цена");
+        verifyNoInteractions(events);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void strangerGets404OnHiddenListing()
+    {
+        Listing listing = listing();
+        listing.publish(NOW);
+        listing.archive(NOW);
+        when(repository.findById(1L)).thenReturn(Optional.of(listing));
+
+        // архив чужому не виден: 404, а не 403
+        assertThatThrownBy(() -> service.publish(1L, principal(8L, Role.USER)))
+                .isInstanceOf(EntityNotFoundException.class)
+                .hasMessage("Объявление с id: 1 не найдено");
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    void strangerGets403OnActiveListing()
+    {
+        Listing listing = listing();
+        listing.publish(NOW);
+        when(repository.findById(1L)).thenReturn(Optional.of(listing));
+
+        assertThatThrownBy(() -> service.markSold(1L, principal(8L, Role.USER)))
+                .isInstanceOf(AccessDeniedException.class);
+        assertThat(listing.getStatus()).isEqualTo(ListingStatus.ACTIVE);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void strangerCannotArchive()
+    {
+        Listing listing = listing();
+        listing.publish(NOW);
+        when(repository.findById(1L)).thenReturn(Optional.of(listing));
+
+        assertThatThrownBy(() -> service.archive(1L, principal(8L, Role.USER)))
+                .isInstanceOf(AccessDeniedException.class);
+        assertThat(listing.getStatus()).isEqualTo(ListingStatus.ACTIVE);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    // Права проверяются раньше перехода: чужому 403, даже если сам переход тоже запрещён
+    @Test
+    void rightsAreCheckedBeforeTransition()
+    {
+        Listing active = listing();
+        active.publish(NOW);
+        when(repository.findById(1L)).thenReturn(Optional.of(active));
+        Listing sold = listing();
+        sold.publish(NOW);
+        sold.markSold(NOW);
+        when(repository.findById(2L)).thenReturn(Optional.of(sold));
+
+        assertThatThrownBy(() -> service.publish(1L, principal(8L, Role.USER))).isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> service.archive(2L, principal(8L, Role.USER))).isInstanceOf(AccessDeniedException.class);
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    void adminArchivesButCannotPublishOrSell()
+    {
+        Listing listing = listing();
+        listing.publish(NOW);
+        when(repository.findById(1L)).thenReturn(Optional.of(listing));
+        when(repository.saveAndFlush(listing)).thenReturn(listing);
+        AppUserPrincipal admin = principal(1L, Role.ADMIN);
+
+        assertThatThrownBy(() -> service.markSold(1L, admin)).isInstanceOf(AccessDeniedException.class);
+        assertThat(service.archive(1L, admin).status()).isEqualTo(ListingStatus.ARCHIVED);
+        assertThatThrownBy(() -> service.publish(1L, admin)).isInstanceOf(AccessDeniedException.class);
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    void forbiddenTransitionIsConflict()
+    {
+        when(repository.findById(1L)).thenReturn(Optional.of(listing()));
+
+        assertThatThrownBy(() -> service.markSold(1L, principal(7L, Role.USER)))
+                .isInstanceOf(ListingStateException.class)
+                .hasMessage("Нельзя перевести объявление из DRAFT в SOLD");
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void publishingActiveAgainIsConflictWithoutEvent()
+    {
+        Listing listing = listing();
+        listing.publish(NOW);
+        when(repository.findById(1L)).thenReturn(Optional.of(listing));
+
+        assertThatThrownBy(() -> service.publish(1L, principal(7L, Role.USER)))
+                .isInstanceOf(ListingStateException.class)
+                .hasMessage("Нельзя перевести объявление из ACTIVE в ACTIVE");
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    void changingMissingListingIs404()
+    {
+        when(repository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.archive(99L, principal(7L, Role.USER)))
+                .isInstanceOf(EntityNotFoundException.class)
+                .hasMessage("Объявление с id: 99 не найдено");
     }
 
     @Test

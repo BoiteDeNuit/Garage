@@ -6,6 +6,7 @@ import com.example.dto.ListingMapper;
 import com.example.dto.ListingPriceDto;
 import com.example.dto.ListingRequest;
 import com.example.dto.ListingStats;
+import com.example.event.ListingPublishedEvent;
 import com.example.exception.EntityNotFoundException;
 import com.example.model.Listing;
 import com.example.model.ListingStatus;
@@ -16,8 +17,11 @@ import com.example.security.AppUserPrincipal;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.jspecify.annotations.Nullable;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,12 +40,14 @@ public class ListingService {
     private final AppUserRepository users;
     private final ListingReader reader;
     private final CurrencyClient currencyClient;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
     private final Counter listingsCreated;
     public ListingService(ListingRepository repository,
                           AppUserRepository users,
                           ListingReader reader,
                           CurrencyClient currencyClient,
+                          ApplicationEventPublisher events,
                           MeterRegistry meterRegistry,
                           Clock clock)
     {
@@ -49,6 +55,7 @@ public class ListingService {
         this.users=users;
         this.reader=reader;
         this.currencyClient=currencyClient;
+        this.events=events;
         this.clock=clock;
         // Не listings.created: Prometheus-клиент считает _created служебным суффиксом счётчика и отрезает его
         this.listingsCreated=Counter.builder("listings.added")
@@ -68,11 +75,39 @@ public class ListingService {
     public ListingDto get(Long id, @Nullable AppUserPrincipal viewer)
     {
         ListingDto card = reader.findCard(id);
-        if(!isVisible(card, viewer))
+        if(!isVisible(card.status(), card.sellerId(), viewer))
         {
             throw notFound(id);
         }
         return card;
+    }
+    // Смена статуса. Порядок проверок: нет или не видно -> 404, видно, но не твоё -> 403, переход запрещён -> 409.
+    // Кэш карточки сбрасывается после коммита: кэш-прокси снаружи транзакционного (порядок в CacheConfig)
+    @Transactional
+    @CacheEvict(cacheNames = "listings", key = "#id")
+    public ListingDto publish(Long id, AppUserPrincipal actor)
+    {
+        Listing listing = loadForChange(id, actor, false);
+        listing.publish(Instant.now(clock));
+        events.publishEvent(ListingPublishedEvent.from(listing));
+        return toDtoWithNewVersion(listing);
+    }
+    @Transactional
+    @CacheEvict(cacheNames = "listings", key = "#id")
+    public ListingDto markSold(Long id, AppUserPrincipal actor)
+    {
+        Listing listing = loadForChange(id, actor, false);
+        listing.markSold(Instant.now(clock));
+        return toDtoWithNewVersion(listing);
+    }
+    // Снять с публикации может и админ: это модерация, а не правка за продавца
+    @Transactional
+    @CacheEvict(cacheNames = "listings", key = "#id")
+    public ListingDto archive(Long id, AppUserPrincipal actor)
+    {
+        Listing listing = loadForChange(id, actor, true);
+        listing.archive(Instant.now(clock));
+        return toDtoWithNewVersion(listing);
     }
     @Transactional(readOnly = true)
     public Page<ListingDto> findPublic(@Nullable String brand, Pageable pageable)
@@ -103,13 +138,35 @@ public class ListingService {
         BigDecimal convertedPrice = listing.getPrice().divide(rate,2, RoundingMode.HALF_UP);
         return new ListingPriceDto(listing.getId(),currency.toUpperCase(),rate,convertedPrice);
     }
-    private boolean isVisible(ListingDto card, @Nullable AppUserPrincipal viewer)
+    private Listing loadForChange(Long id, AppUserPrincipal actor, boolean adminAllowed)
     {
-        if(PUBLIC_STATUSES.contains(card.status()))
+        Listing listing = repository.findById(id).orElseThrow(() -> notFound(id));
+        Long sellerId = listing.getSeller().getId();
+        if(!isVisible(listing.getStatus(), sellerId, actor))
+        {
+            throw notFound(id);
+        }
+        boolean isSeller = sellerId.equals(actor.getId());
+        boolean isModerator = adminAllowed && actor.getRole() == Role.ADMIN;
+        if(!isSeller && !isModerator)
+        {
+            throw new AccessDeniedException("Недостаточно прав");
+        }
+        return listing;
+    }
+    // Hibernate поднимает version только при flush: без него клиент получил бы старую версию
+    private ListingDto toDtoWithNewVersion(Listing listing)
+    {
+        return ListingMapper.toDto(repository.saveAndFlush(listing));
+    }
+    // id сравниваются через equals: Long больше 127 из разных мест — разные объекты
+    private boolean isVisible(ListingStatus status, Long sellerId, @Nullable AppUserPrincipal viewer)
+    {
+        if(PUBLIC_STATUSES.contains(status))
         {
             return true;
         }
-        return viewer != null && (viewer.getId().equals(card.sellerId()) || viewer.getRole() == Role.ADMIN);
+        return viewer != null && (viewer.getId().equals(sellerId) || viewer.getRole() == Role.ADMIN);
     }
     private EntityNotFoundException notFound(Long id)
     {

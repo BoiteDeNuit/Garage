@@ -57,6 +57,42 @@ public class ListingController {
         ListingDto created = listings.create(request, seller);
         return ResponseEntity.created(URI.create("/api/listings/" + created.id())).body(created);
     }
+    @Operation(summary = "Опубликовать", description = "Из черновика или архива. Нужны цена и город")
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponse(responseCode = "200", description = "OK")
+    @ApiResponse(responseCode = "403", description = "Не продавец")
+    @ApiResponse(responseCode = "404", description = "Объявления нет или оно не видно")
+    @ApiResponse(responseCode = "409", description = "Переход запрещён, не хватает цены/города или объявление изменили одновременно")
+    @ApiResponse(responseCode = "401", description = "Нет токена")
+    @PostMapping("/{id}/publish")
+    public ListingDto publish(@PathVariable Long id, @Parameter(hidden = true) @AuthenticationPrincipal AppUserPrincipal actor)
+    {
+        return listings.publish(id, actor);
+    }
+    @Operation(summary = "Отметить проданным", description = "Только из опубликованного. Проданное больше не меняется")
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponse(responseCode = "200", description = "OK")
+    @ApiResponse(responseCode = "403", description = "Не продавец")
+    @ApiResponse(responseCode = "404", description = "Объявления нет или оно не видно")
+    @ApiResponse(responseCode = "409", description = "Переход запрещён или объявление изменили одновременно")
+    @ApiResponse(responseCode = "401", description = "Нет токена")
+    @PostMapping("/{id}/sold")
+    public ListingDto sold(@PathVariable Long id, @Parameter(hidden = true) @AuthenticationPrincipal AppUserPrincipal actor)
+    {
+        return listings.markSold(id, actor);
+    }
+    @Operation(summary = "Снять в архив", description = "Продавец или ADMIN. Только из опубликованного")
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponse(responseCode = "200", description = "OK")
+    @ApiResponse(responseCode = "403", description = "Не продавец и не ADMIN")
+    @ApiResponse(responseCode = "404", description = "Объявления нет или оно не видно")
+    @ApiResponse(responseCode = "409", description = "Переход запрещён или объявление изменили одновременно")
+    @ApiResponse(responseCode = "401", description = "Нет токена")
+    @PostMapping("/{id}/archive")
+    public ListingDto archive(@PathVariable Long id, @Parameter(hidden = true) @AuthenticationPrincipal AppUserPrincipal actor)
+    {
+        return listings.archive(id, actor);
+    }
     @Operation(summary = "Статистика по опубликованным")
     @GetMapping("/stats")
     public ListingStats stats()

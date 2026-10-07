@@ -3,6 +3,8 @@ package com.example.controller;
 import com.example.dto.ListingDto;
 import com.example.dto.ListingRequest;
 import com.example.exception.EntityNotFoundException;
+import com.example.exception.ListingStateException;
+import com.example.model.Listing;
 import com.example.model.ListingStatus;
 import com.example.model.Role;
 import com.example.security.AppUserPrincipal;
@@ -21,6 +23,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.MediaType;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -217,6 +221,57 @@ class ListingControllerTest {
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
         verify(service).findPublic(any(), captor.capture());
         assertThat(captor.getValue().getSort()).isEqualTo(Sort.by(Sort.Order.asc("price"), Sort.Order.desc("id")));
+    }
+
+    @Test
+    void publishReturnsUpdatedListing() throws Exception
+    {
+        when(service.publish(eq(1L), any())).thenReturn(card(1L));
+
+        mockMvc.perform(post("/api/listings/1/publish").with(user(seller)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACTIVE"));
+
+        verify(service).publish(eq(1L), argThat(actor -> actor.getId().equals(7L)));
+    }
+
+    @Test
+    void publishWithoutTokenIs401() throws Exception
+    {
+        mockMvc.perform(post("/api/listings/1/publish"))
+                .andExpect(status().isUnauthorized());
+
+        verify(service, never()).publish(any(), any());
+    }
+
+    @Test
+    void serviceDenialIs403Not500() throws Exception
+    {
+        when(service.markSold(eq(1L), any())).thenThrow(new AccessDeniedException("Недостаточно прав"));
+
+        mockMvc.perform(post("/api/listings/1/sold").with(user(seller)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Недостаточно прав"));
+    }
+
+    @Test
+    void stateConflictIs409() throws Exception
+    {
+        when(service.archive(eq(1L), any())).thenThrow(ListingStateException.transition(ListingStatus.DRAFT, ListingStatus.ARCHIVED));
+
+        mockMvc.perform(post("/api/listings/1/archive").with(user(seller)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Нельзя перевести объявление из DRAFT в ARCHIVED"));
+    }
+
+    @Test
+    void concurrentChangeIs409Not500() throws Exception
+    {
+        when(service.publish(eq(1L), any())).thenThrow(new ObjectOptimisticLockingFailureException(Listing.class, 1L));
+
+        mockMvc.perform(post("/api/listings/1/publish").with(user(seller)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Объявление изменили одновременно с вами, обновите и повторите"));
     }
 
     private ListingRequest supra()
