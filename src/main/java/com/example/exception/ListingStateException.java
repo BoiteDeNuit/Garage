@@ -20,4 +20,8 @@ public class ListingStateException extends RuntimeException {
     {
         return new ListingStateException("Для публикации нужен город");
     }
+    public static ListingStateException notDraft()
+    {
+        return new ListingStateException("Удалить можно только черновик. Опубликованное объявление снимите в архив");
+    }
 }

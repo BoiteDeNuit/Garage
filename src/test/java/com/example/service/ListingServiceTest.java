@@ -67,7 +67,7 @@ class ListingServiceTest {
     @BeforeEach
     void setUp()
     {
-        service = new ListingService(repository, users, reader, currencyClient, events, registry, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new ListingService(repository, users, reader, new ListingAccessPolicy(), currencyClient, events, registry, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -287,6 +287,53 @@ class ListingServiceTest {
                 .isInstanceOf(ListingStateException.class)
                 .hasMessage("Нельзя перевести объявление из ACTIVE в ACTIVE");
         verifyNoInteractions(events);
+    }
+
+    @Test
+    void sellerDeletesDraft()
+    {
+        Listing draft = listing();
+        when(repository.findById(1L)).thenReturn(Optional.of(draft));
+
+        service.delete(1L, principal(7L, Role.USER));
+
+        verify(repository).delete(draft);
+    }
+
+    @Test
+    void publishedListingCannotBeDeleted()
+    {
+        Listing listing = listing();
+        listing.publish(NOW);
+        when(repository.findById(1L)).thenReturn(Optional.of(listing));
+
+        assertThatThrownBy(() -> service.delete(1L, principal(7L, Role.USER)))
+                .isInstanceOf(ListingStateException.class)
+                .hasMessage("Удалить можно только черновик. Опубликованное объявление снимите в архив");
+        verify(repository, never()).delete(any(Listing.class));
+    }
+
+    @Test
+    void strangerCannotDelete()
+    {
+        Listing listing = listing();
+        listing.publish(NOW);
+        when(repository.findById(1L)).thenReturn(Optional.of(listing));
+        when(repository.findById(2L)).thenReturn(Optional.of(listing()));
+
+        // опубликованное чужое видно: 403; чужой черновик не виден: 404
+        assertThatThrownBy(() -> service.delete(1L, principal(8L, Role.USER))).isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> service.delete(2L, principal(8L, Role.USER))).isInstanceOf(EntityNotFoundException.class);
+        verify(repository, never()).delete(any(Listing.class));
+    }
+
+    @Test
+    void adminCannotDeleteSomeoneElsesDraft()
+    {
+        when(repository.findById(1L)).thenReturn(Optional.of(listing()));
+
+        assertThatThrownBy(() -> service.delete(1L, principal(1L, Role.ADMIN))).isInstanceOf(AccessDeniedException.class);
+        verify(repository, never()).delete(any(Listing.class));
     }
 
     @Test

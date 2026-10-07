@@ -16,6 +16,7 @@ import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -92,6 +93,19 @@ public class ListingController {
     public ListingDto archive(@PathVariable Long id, @Parameter(hidden = true) @AuthenticationPrincipal AppUserPrincipal actor)
     {
         return listings.archive(id, actor);
+    }
+    @Operation(summary = "Удалить черновик", description = "Только продавец и только черновик. Опубликованное снимают в архив")
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponse(responseCode = "204", description = "Удалено")
+    @ApiResponse(responseCode = "401", description = "Нет токена")
+    @ApiResponse(responseCode = "403", description = "Не продавец")
+    @ApiResponse(responseCode = "404", description = "Объявления нет или оно не видно")
+    @ApiResponse(responseCode = "409", description = "Не черновик")
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable Long id, @Parameter(hidden = true) @AuthenticationPrincipal AppUserPrincipal actor)
+    {
+        listings.delete(id, actor);
     }
     @Operation(summary = "Статистика по опубликованным")
     @GetMapping("/stats")

@@ -127,6 +127,19 @@ class ListingTest {
         assertUntouched(listing);
     }
 
+    @Test
+    void onlyDraftIsDeletable()
+    {
+        draft(new BigDecimal("4500000"), "Самара").checkDeletable();
+
+        Listing listing = published();
+        assertThatThrownBy(listing::checkDeletable)
+                .isInstanceOf(ListingStateException.class)
+                .hasMessage("Удалить можно только черновик. Опубликованное объявление снимите в архив");
+        listing.archive(LATER);
+        assertThatThrownBy(listing::checkDeletable).isInstanceOf(ListingStateException.class);
+    }
+
     private Listing draft(BigDecimal price, String city)
     {
         return Listing.draft(seller, new ListingDetails("Toyota", "Supra", "2JZ", 320, 1998, 154000, price, city, null), CREATED);

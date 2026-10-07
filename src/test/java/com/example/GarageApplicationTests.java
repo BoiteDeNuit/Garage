@@ -29,6 +29,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -235,6 +236,30 @@ class GarageApplicationTests extends IntegrationTest {
         // две публикации: первая и повторная из архива
         verify(notificationsListener, timeout(15000).times(2))
                 .onListingPublished(argThat((ListingPublishedEvent event) -> event.listingId().equals(id)));
+    }
+
+    @Test
+    void onlySellerDeletesOnlyDraft() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        AppUser stranger = createUser(Role.USER);
+        Long draft = create(seller, supra(uniqueBrand()));
+        mockMvc.perform(get("/api/listings/" + draft).header("Authorization", bearer(seller))).andExpect(status().isOk());
+        assertThat(redisTemplate.hasKey("listings::" + draft)).isTrue();
+
+        mockMvc.perform(delete("/api/listings/" + draft).header("Authorization", bearer(stranger))).andExpect(status().isNotFound());
+        mockMvc.perform(delete("/api/listings/" + draft).header("Authorization", bearer(admin()))).andExpect(status().isForbidden());
+        mockMvc.perform(delete("/api/listings/" + draft).header("Authorization", bearer(seller))).andExpect(status().isNoContent());
+
+        assertThat(redisTemplate.hasKey("listings::" + draft)).isFalse();
+        mockMvc.perform(get("/api/listings/" + draft).header("Authorization", bearer(seller))).andExpect(status().isNotFound());
+
+        Long active = insertListing(seller, uniqueBrand(), ListingStatus.ACTIVE);
+        mockMvc.perform(delete("/api/listings/" + active).header("Authorization", bearer(stranger))).andExpect(status().isForbidden());
+        mockMvc.perform(delete("/api/listings/" + active).header("Authorization", bearer(seller)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Удалить можно только черновик. Опубликованное объявление снимите в архив"));
+        mockMvc.perform(get("/api/listings/" + active)).andExpect(status().isOk());
     }
 
     @Test

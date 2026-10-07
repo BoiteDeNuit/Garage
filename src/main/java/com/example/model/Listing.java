@@ -78,6 +78,14 @@ public class Listing {
         this.status=ListingStatus.ARCHIVED;
         this.updatedAt=now;
     }
+    // Удаляется только то, чего никто, кроме продавца, не видел. Опубликованное снимают в архив, история остаётся
+    public void checkDeletable()
+    {
+        if(status != ListingStatus.DRAFT)
+        {
+            throw ListingStateException.notDraft();
+        }
+    }
     private void checkTransition(ListingStatus target)
     {
         if(!status.canTransitionTo(target))

@@ -42,6 +42,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -272,6 +273,24 @@ class ListingControllerTest {
         mockMvc.perform(post("/api/listings/1/publish").with(user(seller)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Объявление изменили одновременно с вами, обновите и повторите"));
+    }
+
+    @Test
+    void deleteReturns204() throws Exception
+    {
+        mockMvc.perform(delete("/api/listings/1").with(user(seller)))
+                .andExpect(status().isNoContent());
+
+        verify(service).delete(eq(1L), argThat(actor -> actor.getId().equals(7L)));
+    }
+
+    @Test
+    void deleteWithoutTokenIs401() throws Exception
+    {
+        mockMvc.perform(delete("/api/listings/1"))
+                .andExpect(status().isUnauthorized());
+
+        verify(service, never()).delete(any(), any());
     }
 
     private ListingRequest supra()
