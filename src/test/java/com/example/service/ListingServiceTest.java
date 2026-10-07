@@ -5,6 +5,7 @@ import com.example.dto.ListingDto;
 import com.example.dto.ListingPriceDto;
 import com.example.dto.ListingRequest;
 import com.example.dto.ListingStats;
+import com.example.dto.ListingUpdateRequest;
 import com.example.event.ListingPublishedEvent;
 import com.example.exception.EntityNotFoundException;
 import com.example.exception.ListingStateException;
@@ -290,6 +291,55 @@ class ListingServiceTest {
     }
 
     @Test
+    void updateWithCurrentVersionChangesDetails()
+    {
+        Listing listing = listing();
+        ReflectionTestUtils.setField(listing, "version", Long.valueOf(1000));
+        when(repository.findById(1L)).thenReturn(Optional.of(listing));
+        when(repository.saveAndFlush(listing)).thenReturn(listing);
+
+        // равные версии, но разные объекты Long: сравнение через == здесь бы сломалось
+        ListingDto result = service.update(1L, update(Long.valueOf(1000), new BigDecimal("3900000")), principal(7L, Role.USER));
+
+        assertThat(result.price()).isEqualByComparingTo("3900000");
+        assertThat(result.status()).isEqualTo(ListingStatus.DRAFT);
+        assertThat(result.sellerId()).isEqualTo(7L);
+        assertThat(result.updatedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void staleVersionIsConflictAndNothingChanges()
+    {
+        Listing listing = listing();
+        ReflectionTestUtils.setField(listing, "version", 3L);
+        when(repository.findById(1L)).thenReturn(Optional.of(listing));
+
+        assertThatThrownBy(() -> service.update(1L, update(2L, new BigDecimal("3900000")), principal(7L, Role.USER)))
+                .isInstanceOf(ListingStateException.class)
+                .hasMessage("Объявление уже изменили, актуальная версия 3. Обновите и повторите");
+        assertThat(listing.getPrice()).isEqualByComparingTo("4500000");
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void strangerCannotEdit()
+    {
+        Listing active = listing();
+        active.publish(NOW);
+        ReflectionTestUtils.setField(active, "version", 1L);
+        when(repository.findById(1L)).thenReturn(Optional.of(active));
+        when(repository.findById(2L)).thenReturn(Optional.of(listing()));
+
+        assertThatThrownBy(() -> service.update(1L, update(1L, new BigDecimal("1")), principal(8L, Role.USER)))
+                .isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> service.update(2L, update(0L, new BigDecimal("1")), principal(8L, Role.USER)))
+                .isInstanceOf(EntityNotFoundException.class);
+        assertThatThrownBy(() -> service.update(1L, update(1L, new BigDecimal("1")), principal(1L, Role.ADMIN)))
+                .isInstanceOf(AccessDeniedException.class);
+        assertThat(active.getPrice()).isEqualByComparingTo("4500000");
+    }
+
+    @Test
     void sellerDeletesDraft()
     {
         Listing draft = listing();
@@ -445,6 +495,11 @@ class ListingServiceTest {
     private ListingRequest request()
     {
         return new ListingRequest("Toyota", "Supra", "2JZ", 320, 1998, 154000, new BigDecimal("4500000"), "Самара", null);
+    }
+
+    private ListingUpdateRequest update(Long version, BigDecimal price)
+    {
+        return new ListingUpdateRequest(version, "Toyota", "Supra", "2JZ", 330, 1998, 160000, price, "Самара", null);
     }
 
     private Listing listing()

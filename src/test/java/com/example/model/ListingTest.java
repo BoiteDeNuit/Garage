@@ -3,6 +3,7 @@ package com.example.model;
 import com.example.exception.ListingStateException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -128,6 +129,71 @@ class ListingTest {
     }
 
     @Test
+    void draftDetailsAreUpdated()
+    {
+        Listing listing = draft(null, null);
+
+        listing.updateDetails(details(new BigDecimal("3900000"), "Тольятти"), LATER);
+
+        assertThat(listing.getPrice()).isEqualByComparingTo("3900000");
+        assertThat(listing.getCity()).isEqualTo("Тольятти");
+        assertThat(listing.getMileageKm()).isEqualTo(160000);
+        assertThat(listing.getStatus()).isEqualTo(ListingStatus.DRAFT);
+        assertThat(listing.getUpdatedAt()).isEqualTo(LATER);
+        assertThat(listing.getSeller()).isSameAs(seller);
+    }
+
+    @Test
+    void activeKeepsStatusAfterEdit()
+    {
+        Listing listing = published();
+
+        listing.updateDetails(details(new BigDecimal("4100000"), "Самара"), LATER);
+
+        assertThat(listing.getStatus()).isEqualTo(ListingStatus.ACTIVE);
+        assertThat(listing.getPrice()).isEqualByComparingTo("4100000");
+        assertThat(listing.getPublishedAt()).isEqualTo(NOW);
+    }
+
+    @ParameterizedTest
+    @CsvSource(value = {"NULL, Самара", "4100000, NULL", "4100000, '  '"}, nullValues = "NULL")
+    void activeCannotLosePriceOrCity(BigDecimal price, String city)
+    {
+        Listing listing = published();
+
+        assertThatThrownBy(() -> listing.updateDetails(details(price, city), LATER))
+                .isInstanceOf(ListingStateException.class)
+                .hasMessage("У опубликованного объявления должны быть цена и город");
+        assertThat(listing.getPrice()).isEqualByComparingTo("4500000");
+        assertThat(listing.getCity()).isEqualTo("Самара");
+        assertThat(listing.getUpdatedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void soldCannotBeEdited()
+    {
+        Listing listing = published();
+        listing.markSold(NOW);
+
+        assertThatThrownBy(() -> listing.updateDetails(details(new BigDecimal("1"), "Самара"), LATER))
+                .isInstanceOf(ListingStateException.class)
+                .hasMessage("Проданное объявление менять нельзя");
+        assertThat(listing.getPrice()).isEqualByComparingTo("4500000");
+    }
+
+    @Test
+    void archivedCanBeEditedWithoutPrice()
+    {
+        Listing listing = published();
+        listing.archive(NOW);
+
+        listing.updateDetails(details(null, null), LATER);
+
+        assertThat(listing.getStatus()).isEqualTo(ListingStatus.ARCHIVED);
+        assertThat(listing.getPrice()).isNull();
+    }
+
+    @Test
     void onlyDraftIsDeletable()
     {
         draft(new BigDecimal("4500000"), "Самара").checkDeletable();
@@ -143,6 +209,11 @@ class ListingTest {
     private Listing draft(BigDecimal price, String city)
     {
         return Listing.draft(seller, new ListingDetails("Toyota", "Supra", "2JZ", 320, 1998, 154000, price, city, null), CREATED);
+    }
+
+    private ListingDetails details(BigDecimal price, String city)
+    {
+        return new ListingDetails("Toyota", "Supra", "2JZ", 330, 1998, 160000, price, city, "Свежее ТО");
     }
 
     private Listing published()

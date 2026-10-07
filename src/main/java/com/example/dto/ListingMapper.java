@@ -19,4 +19,10 @@ public class ListingMapper {
                 request.horsePower(), request.year(), request.mileageKm(),
                 request.price(), request.city(), request.description());
     }
+    public static ListingDetails toDetails(ListingUpdateRequest request)
+    {
+        return new ListingDetails(request.brand(), request.model(), request.engineCode(),
+                request.horsePower(), request.year(), request.mileageKm(),
+                request.price(), request.city(), request.description());
+    }
 }

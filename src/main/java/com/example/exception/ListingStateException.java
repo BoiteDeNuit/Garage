@@ -20,6 +20,18 @@ public class ListingStateException extends RuntimeException {
     {
         return new ListingStateException("Для публикации нужен город");
     }
+    public static ListingStateException soldIsFinal()
+    {
+        return new ListingStateException("Проданное объявление менять нельзя");
+    }
+    public static ListingStateException activeNeedsPriceAndCity()
+    {
+        return new ListingStateException("У опубликованного объявления должны быть цена и город");
+    }
+    public static ListingStateException staleVersion(long actual)
+    {
+        return new ListingStateException("Объявление уже изменили, актуальная версия " + actual + ". Обновите и повторите");
+    }
     public static ListingStateException notDraft()
     {
         return new ListingStateException("Удалить можно только черновик. Опубликованное объявление снимите в архив");

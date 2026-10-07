@@ -4,6 +4,7 @@ import com.example.dto.ListingDto;
 import com.example.dto.ListingPriceDto;
 import com.example.dto.ListingRequest;
 import com.example.dto.ListingStats;
+import com.example.dto.ListingUpdateRequest;
 import com.example.security.AppUserPrincipal;
 import com.example.service.ListingService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -57,6 +58,21 @@ public class ListingController {
     {
         ListingDto created = listings.create(request, seller);
         return ResponseEntity.created(URI.create("/api/listings/" + created.id())).body(created);
+    }
+    @Operation(summary = "Изменить объявление", description = "Все поля и version из последнего GET. Статус и продавец не меняются")
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponse(responseCode = "200", description = "OK, в ответе новая version")
+    @ApiResponse(responseCode = "400", description = "Ошибка в данных или нет version")
+    @ApiResponse(responseCode = "401", description = "Нет токена")
+    @ApiResponse(responseCode = "403", description = "Не продавец")
+    @ApiResponse(responseCode = "404", description = "Объявления нет или оно не видно")
+    @ApiResponse(responseCode = "409", description = "Устаревшая version, объявление продано или у опубликованного убирают цену/город")
+    @PutMapping("/{id}")
+    public ListingDto update(@PathVariable Long id,
+                             @Valid @RequestBody ListingUpdateRequest request,
+                             @Parameter(hidden = true) @AuthenticationPrincipal AppUserPrincipal actor)
+    {
+        return listings.update(id, request, actor);
     }
     @Operation(summary = "Опубликовать", description = "Из черновика или архива. Нужны цена и город")
     @SecurityRequirement(name = "bearerAuth")

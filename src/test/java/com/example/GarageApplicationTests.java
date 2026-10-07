@@ -2,6 +2,7 @@ package com.example;
 
 import com.example.dto.ListingDto;
 import com.example.dto.ListingRequest;
+import com.example.dto.ListingUpdateRequest;
 import com.example.dto.LoginRequest;
 import com.example.dto.LoginResponse;
 import com.example.event.ListingPublishedEvent;
@@ -32,6 +33,7 @@ import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -239,6 +241,40 @@ class GarageApplicationTests extends IntegrationTest {
     }
 
     @Test
+    void editWithClientVersion() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        AppUser stranger = createUser(Role.USER);
+        String brand = uniqueBrand();
+        Long id = create(seller, supra(brand));
+        mockMvc.perform(get("/api/listings/" + id).header("Authorization", bearer(seller))).andExpect(status().isOk());
+
+        edit(id, seller, new ListingUpdateRequest(0L, brand, "Supra", "2JZ", 330, 1998, 160000, new BigDecimal("3900000"), "Тольятти", null))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(1))
+                .andExpect(jsonPath("$.price").value(3900000.00))
+                .andExpect(jsonPath("$.status").value("DRAFT"));
+        // кэш выкинут: GET показывает новую цену, а не ту, что лежала в Redis
+        mockMvc.perform(get("/api/listings/" + id).header("Authorization", bearer(seller)))
+                .andExpect(jsonPath("$.city").value("Тольятти"));
+
+        // вторая вкладка с формой, открытой до правки
+        edit(id, seller, new ListingUpdateRequest(0L, brand, "Supra", "2JZ", 330, 1998, 160000, new BigDecimal("1000000"), "Самара", null))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Объявление уже изменили, актуальная версия 1. Обновите и повторите"));
+
+        change(id, "publish", seller).andExpect(status().isOk());
+        edit(id, seller, new ListingUpdateRequest(2L, brand, "Supra", "2JZ", 330, 1998, 160000, null, "Самара", null))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("У опубликованного объявления должны быть цена и город"));
+        edit(id, stranger, new ListingUpdateRequest(2L, brand, "Supra", "2JZ", 330, 1998, 160000, new BigDecimal("1"), "Самара", null))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/listings/" + id))
+                .andExpect(jsonPath("$.price").value(3900000.00))
+                .andExpect(jsonPath("$.version").value(2));
+    }
+
+    @Test
     void onlySellerDeletesOnlyDraft() throws Exception
     {
         AppUser seller = createUser(Role.USER);
@@ -327,6 +363,14 @@ class GarageApplicationTests extends IntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readValue(body, ListingDto.class).id();
+    }
+
+    private ResultActions edit(Long id, AppUser actor, ListingUpdateRequest request) throws Exception
+    {
+        return mockMvc.perform(put("/api/listings/" + id)
+                .header("Authorization", bearer(actor))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)));
     }
 
     private ResultActions change(Long id, String action, AppUser actor) throws Exception

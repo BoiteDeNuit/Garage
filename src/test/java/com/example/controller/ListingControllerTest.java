@@ -2,6 +2,7 @@ package com.example.controller;
 
 import com.example.dto.ListingDto;
 import com.example.dto.ListingRequest;
+import com.example.dto.ListingUpdateRequest;
 import com.example.exception.EntityNotFoundException;
 import com.example.exception.ListingStateException;
 import com.example.model.Listing;
@@ -46,6 +47,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -276,6 +278,41 @@ class ListingControllerTest {
     }
 
     @Test
+    void updateReturnsListing() throws Exception
+    {
+        when(service.update(eq(1L), any(), any())).thenReturn(card(1L));
+
+        mockMvc.perform(put("/api/listings/1").with(user(seller))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(edit(0L))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(1));
+
+        verify(service).update(eq(1L), argThat(request -> request.version().equals(0L)), argThat(actor -> actor.getId().equals(7L)));
+    }
+
+    @Test
+    void updateWithoutVersionIs400() throws Exception
+    {
+        mockMvc.perform(put("/api/listings/1").with(user(seller))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(edit(null))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("Укажите версию объявления")));
+
+        verify(service, never()).update(any(), any(), any());
+    }
+
+    @Test
+    void updateWithoutTokenIs401() throws Exception
+    {
+        mockMvc.perform(put("/api/listings/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(edit(0L))))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void deleteReturns204() throws Exception
     {
         mockMvc.perform(delete("/api/listings/1").with(user(seller)))
@@ -291,6 +328,11 @@ class ListingControllerTest {
                 .andExpect(status().isUnauthorized());
 
         verify(service, never()).delete(any(), any());
+    }
+
+    private ListingUpdateRequest edit(Long version)
+    {
+        return new ListingUpdateRequest(version, "Toyota", "Supra", "2JZ", 320, 1998, 154000, new BigDecimal("4400000"), "Самара", null);
     }
 
     private ListingRequest supra()

@@ -78,6 +78,21 @@ public class Listing {
         this.status=ListingStatus.ARCHIVED;
         this.updatedAt=now;
     }
+    // Правка описания. Статус и продавец не меняются: для статуса есть свои действия, продавец — это владелец
+    public void updateDetails(ListingDetails details, Instant now)
+    {
+        if(status == ListingStatus.SOLD)
+        {
+            throw ListingStateException.soldIsFinal();
+        }
+        boolean losesPriceOrCity = details.price() == null || details.city() == null || details.city().isBlank();
+        if(status == ListingStatus.ACTIVE && losesPriceOrCity)
+        {
+            throw ListingStateException.activeNeedsPriceAndCity();
+        }
+        apply(details);
+        this.updatedAt=now;
+    }
     // Удаляется только то, чего никто, кроме продавца, не видел. Опубликованное снимают в архив, история остаётся
     public void checkDeletable()
     {

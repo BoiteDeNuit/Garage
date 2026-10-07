@@ -6,8 +6,10 @@ import com.example.dto.ListingMapper;
 import com.example.dto.ListingPriceDto;
 import com.example.dto.ListingRequest;
 import com.example.dto.ListingStats;
+import com.example.dto.ListingUpdateRequest;
 import com.example.event.ListingPublishedEvent;
 import com.example.exception.EntityNotFoundException;
+import com.example.exception.ListingStateException;
 import com.example.model.Listing;
 import com.example.model.ListingAction;
 import com.example.model.ListingStatus;
@@ -82,6 +84,21 @@ public class ListingService {
     }
     // Смена статуса. Порядок проверок: нет или не видно -> 404, видно, но не твоё -> 403, переход запрещён -> 409.
     // Кэш карточки сбрасывается после коммита: кэш-прокси снаружи транзакционного (порядок в CacheConfig)
+    // Версия от клиента закрывает lost update между GET и PUT: двое открыли форму, второй затёр бы первого.
+    // @Version ловит только пересекающиеся транзакции, а не правки с разницей в минуты.
+    // Записать версию клиента в сущность нельзя: Hibernate проверяет ту, что прочитал сам, поэтому сравниваем руками
+    @Transactional
+    @CacheEvict(cacheNames = "listings", key = "#id")
+    public ListingDto update(Long id, ListingUpdateRequest request, AppUserPrincipal actor)
+    {
+        Listing listing = loadForChange(id, actor, ListingAction.EDIT);
+        if(!listing.getVersion().equals(request.version()))
+        {
+            throw ListingStateException.staleVersion(listing.getVersion());
+        }
+        listing.updateDetails(ListingMapper.toDetails(request), Instant.now(clock));
+        return toDtoWithNewVersion(listing);
+    }
     @Transactional
     @CacheEvict(cacheNames = "listings", key = "#id")
     public ListingDto publish(Long id, AppUserPrincipal actor)
