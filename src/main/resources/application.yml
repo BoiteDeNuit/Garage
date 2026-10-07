@@ -23,7 +23,7 @@ spring:
           max-page-size: 100
           serialization-mode: via-dto
   cache:
-    cache-names: cars
+    cache-names: listings
     redis:
       enable-statistics: true
   datasource:

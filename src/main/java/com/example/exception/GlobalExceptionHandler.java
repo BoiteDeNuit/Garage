@@ -67,6 +67,11 @@ public class GlobalExceptionHandler {
     {
         return build(HttpStatus.BAD_REQUEST,"Некорректный формат запроса",request);
     }
+    @ExceptionHandler(InvalidRequestException.class)
+    public ResponseEntity<ErrorResponse> invalidRequest(InvalidRequestException e, HttpServletRequest request)
+    {
+        return build(HttpStatus.BAD_REQUEST,e.getMessage(),request);
+    }
     @ExceptionHandler(PropertyReferenceException.class)
     public ResponseEntity<ErrorResponse> unknownSortField(PropertyReferenceException e, HttpServletRequest request)
     {

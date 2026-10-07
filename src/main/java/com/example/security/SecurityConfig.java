@@ -37,11 +37,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers("/actuator/health/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/cars/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/listings/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/actuator/prometheus").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/cars/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/cars/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .exceptionHandling(ex -> ex

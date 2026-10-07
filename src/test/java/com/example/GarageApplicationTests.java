@@ -1,58 +1,73 @@
 package com.example;
 
-import com.example.dto.CarDto;
+import com.example.config.KafkaTopicsConfig;
+import com.example.dto.ListingDto;
+import com.example.dto.ListingRequest;
 import com.example.dto.LoginRequest;
 import com.example.dto.LoginResponse;
-import com.example.event.CarCreatedEvent;
-import com.example.security.JwtService;
+import com.example.event.ListingPublishedEvent;
+import com.example.model.AppUser;
+import com.example.model.ListingStatus;
+import com.example.model.Role;
 import com.example.support.IntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.kafka.core.KafkaTemplate;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class GarageApplicationTests extends IntegrationTest {
     @Autowired
-    JwtService jwtService;
+    KafkaTemplate<Long, ListingPublishedEvent> kafkaTemplate;
 
     @Test
-    void adminCreatesReadsAndDeletesCar() throws Exception
+    void sellerCreatesDraftVisibleOnlyToSellerAndAdmin() throws Exception
     {
-        String token = login();
-        Long id = createCar(token);
+        AppUser seller = createUser(Role.USER);
+        AppUser stranger = createUser(Role.USER);
+        String brand = uniqueBrand();
 
-        mockMvc.perform(get("/api/cars/" + id))
+        String body = mockMvc.perform(post("/api/listings")
+                        .header("Authorization", bearer(seller))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(supra(brand))))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Location", containsString("/api/listings/")))
+                .andExpect(jsonPath("$.status").value("DRAFT"))
+                .andExpect(jsonPath("$.version").value(0))
+                .andExpect(jsonPath("$.sellerId").value(seller.getId()))
+                .andReturn().getResponse().getContentAsString();
+        Long id = objectMapper.readValue(body, ListingDto.class).id();
+
+        mockMvc.perform(get("/api/listings/" + id)).andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/listings/" + id).header("Authorization", bearer(stranger))).andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/listings/" + id).header("Authorization", bearer(seller))).andExpect(status().isOk());
+        mockMvc.perform(get("/api/listings/" + id).header("Authorization", bearer(admin()))).andExpect(status().isOk());
+        mockMvc.perform(get("/api/listings").param("brand", brand))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.model").value("Supra"))
-                .andExpect(jsonPath("$.price").value(4500000));
-
-        mockMvc.perform(delete("/api/cars/" + id).header("Authorization", "Bearer " + token))
-                .andExpect(status().isNoContent());
-
-        mockMvc.perform(get("/api/cars/" + id))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.status").value(404));
+                .andExpect(jsonPath("$.page.totalElements").value(0));
     }
 
     @Test
     void createWithoutTokenIs401() throws Exception
     {
-        mockMvc.perform(post("/api/cars")
+        mockMvc.perform(post("/api/listings")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(supra())))
+                        .content(objectMapper.writeValueAsString(supra("Toyota"))))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message").value("Требуется аутентификация"));
     }
@@ -67,74 +82,132 @@ class GarageApplicationTests extends IntegrationTest {
     }
 
     @Test
-    void carIsCachedInRedisAndEvictedOnDelete() throws Exception
-    {
-        String token = login();
-        Long id = createCar(token);
-
-        mockMvc.perform(get("/api/cars/" + id)).andExpect(status().isOk());
-        assertThat(redisTemplate.hasKey("cars::" + id)).isTrue();
-
-        mockMvc.perform(delete("/api/cars/" + id).header("Authorization", "Bearer " + token))
-                .andExpect(status().isNoContent());
-        assertThat(redisTemplate.hasKey("cars::" + id)).isFalse();
-    }
-
-    @Test
-    void createdCarReachesKafkaListener() throws Exception
-    {
-        Long id = createCar(login());
-
-        verify(notificationsListener, timeout(15000))
-                .onCarCreated(argThat((CarCreatedEvent event) -> event.id().equals(id)));
-    }
-
-    @Test
-    void prometheusExposesCarsCounter() throws Exception
-    {
-        mockMvc.perform(get("/actuator/prometheus"))
-                .andExpect(status().isOk())
-                .andExpect(content().string(containsString("garage_cars_added_total")))
-                .andExpect(content().string(containsString("cache_gets_total{cache=\"cars\"")));
-    }
-
-    @Test
     void loginTokenCarriesOnlyRoles() throws Exception
-    {
-        assertThat(jwtService.extractRoles(login())).containsExactly("ROLE_ADMIN");
-    }
-
-    @Test
-    void unknownSortFieldIs400() throws Exception
-    {
-        mockMvc.perform(get("/api/cars").param("sort", "foo"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Нельзя сортировать по полю: foo"));
-    }
-
-    private String login() throws Exception
     {
         String body = mockMvc.perform(post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new LoginRequest("boss", "boss-password"))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        return objectMapper.readValue(body, LoginResponse.class).token();
+        String token = objectMapper.readValue(body, LoginResponse.class).token();
+
+        assertThat(jwtService.extractRoles(token)).containsExactly("ROLE_ADMIN");
     }
 
-    private Long createCar(String token) throws Exception
+    @Test
+    void publicFeedShowsOnlyActive() throws Exception
     {
-        String body = mockMvc.perform(post("/api/cars")
-                        .header("Authorization", "Bearer " + token)
+        AppUser seller = createUser(Role.USER);
+        String brand = uniqueBrand();
+        Long active = insertListing(seller, brand, ListingStatus.ACTIVE);
+        insertListing(seller, brand, ListingStatus.DRAFT);
+        insertListing(seller, brand, ListingStatus.SOLD);
+        insertListing(seller, brand, ListingStatus.ARCHIVED);
+
+        mockMvc.perform(get("/api/listings").param("brand", brand.toLowerCase()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(active));
+    }
+
+    @Test
+    void unknownSortFieldIs400() throws Exception
+    {
+        mockMvc.perform(get("/api/listings").param("sort", "foo"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Нельзя сортировать по полю: foo"));
+    }
+
+    @Test
+    void sortBySellerPasswordHashIs400() throws Exception
+    {
+        mockMvc.perform(get("/api/listings").param("sort", "seller.passwordHash"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void cardIsCachedInRedis() throws Exception
+    {
+        Long id = insertListing(createUser(Role.USER), uniqueBrand(), ListingStatus.ACTIVE);
+
+        mockMvc.perform(get("/api/listings/" + id)).andExpect(status().isOk());
+
+        assertThat(redisTemplate.hasKey("listings::" + id)).isTrue();
+    }
+
+    @Test
+    void priceOfHiddenListingIs404WithoutCallingCbr() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        Long draft = insertListing(seller, uniqueBrand(), ListingStatus.DRAFT);
+        Long archived = insertListing(seller, uniqueBrand(), ListingStatus.ARCHIVED);
+
+        // У обоих есть цена, так что 404 только из-за статуса. Адрес ЦБ в тестах localhost:1:
+        // если бы сервис пошёл к ЦБ, ответ был бы 503
+        mockMvc.perform(get("/api/listings/" + draft + "/price"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Объявление с id: " + draft + " не найдено"));
+        mockMvc.perform(get("/api/listings/" + archived + "/price"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Объявление с id: " + archived + " не найдено"));
+    }
+
+    @Test
+    void createResponseMatchesStoredListing() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        String created = mockMvc.perform(post("/api/listings")
+                        .header("Authorization", bearer(seller))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(supra())))
+                        .content(objectMapper.writeValueAsString(supra(uniqueBrand()))))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
-        return objectMapper.readValue(body, CarDto.class).id();
+        ListingDto posted = objectMapper.readValue(created, ListingDto.class);
+
+        String read = mockMvc.perform(get("/api/listings/" + posted.id()).header("Authorization", bearer(seller)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(objectMapper.readValue(read, ListingDto.class)).isEqualTo(posted);
     }
 
-    private CarDto supra()
+    @Test
+    void sortWithIgnoreCaseOnNumberIsNot500() throws Exception
     {
-        return new CarDto(null, "Toyota", "Supra", "2JZ", 320, 1998, new BigDecimal("4500000"));
+        mockMvc.perform(get("/api/listings").param("sort", "price,desc,ignorecase"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void hugePageNumberIs400() throws Exception
+    {
+        mockMvc.perform(get("/api/listings").param("page", "30000000").param("size", "100"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Слишком большой номер страницы"));
+    }
+
+    @Test
+    void publishedEventReachesKafkaListener()
+    {
+        ListingPublishedEvent event = new ListingPublishedEvent(777L, 1L, "Toyota", "Supra", new BigDecimal("4500000"), Instant.now());
+
+        kafkaTemplate.send(KafkaTopicsConfig.LISTING_PUBLISHED, event.listingId(), event);
+
+        verify(notificationsListener, timeout(15000))
+                .onListingPublished(argThat((ListingPublishedEvent received) -> received.listingId().equals(777L)));
+    }
+
+    @Test
+    void prometheusExposesListingCounters() throws Exception
+    {
+        mockMvc.perform(get("/actuator/prometheus"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("listings_added_total")))
+                .andExpect(content().string(containsString("cache_gets_total{cache=\"listings\"")));
+    }
+
+    private ListingRequest supra(String brand)
+    {
+        return new ListingRequest(brand, "Supra", "2JZ", 320, 1998, 154000, new BigDecimal("4500000"), "Самара", "Один владелец");
     }
 }

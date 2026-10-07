@@ -7,10 +7,10 @@ import org.springframework.kafka.config.TopicBuilder;
 
 @Configuration
 public class KafkaTopicsConfig {
-    public static final String CAR_CREATED = "car-created";
+    public static final String LISTING_PUBLISHED = "listing-published";
     @Bean
-    public NewTopic carCreatedTopic() {
-        return TopicBuilder.name(CAR_CREATED)
+    public NewTopic listingPublishedTopic() {
+        return TopicBuilder.name(LISTING_PUBLISHED)
                 .partitions(3)
                 .replicas(1)
                 .build();
