@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -14,7 +15,10 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
+// Админка защищена в два уровня: правило по URL здесь и @PreAuthorize на методе сервиса.
+// Новый админский эндпоинт без аннотации не окажется открыт любому вошедшему, и наоборот
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;
     private final SecurityErrorWriter errorWriter;
@@ -40,6 +44,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/listings/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/actuator/prometheus").permitAll()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .exceptionHandling(ex -> ex

@@ -1,6 +1,7 @@
 package com.example.service;
 
 import com.example.client.CurrencyClient;
+import com.example.dto.AdminListingDto;
 import com.example.dto.ListingDto;
 import com.example.dto.ListingMapper;
 import com.example.dto.ListingPriceDto;
@@ -24,6 +25,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -139,6 +141,16 @@ public class ListingService {
                 ? repository.findByStatus(ListingStatus.ACTIVE, pageable)
                 : repository.findByStatusAndBrandIgnoreCase(ListingStatus.ACTIVE, brand, pageable);
         return page.map(ListingMapper::toDto);
+    }
+    // Второй уровень защиты админки: URL-правило в SecurityConfig плюс аннотация здесь
+    @PreAuthorize("hasRole('ADMIN')")
+    @Transactional(readOnly = true)
+    public Page<AdminListingDto> findAllForAdmin(@Nullable ListingStatus status, Pageable pageable)
+    {
+        Page<Listing> page = status == null
+                ? repository.findAllWithSeller(pageable)
+                : repository.findWithSellerByStatus(status, pageable);
+        return page.map(ListingMapper::toAdminDto);
     }
     @Transactional(readOnly = true)
     public ListingStats stats()

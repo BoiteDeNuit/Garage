@@ -1,6 +1,7 @@
 package com.example.service;
 
 import com.example.client.CurrencyClient;
+import com.example.dto.AdminListingDto;
 import com.example.dto.ListingDto;
 import com.example.dto.ListingPriceDto;
 import com.example.dto.ListingRequest;
@@ -394,6 +395,30 @@ class ListingServiceTest {
         assertThatThrownBy(() -> service.archive(99L, principal(7L, Role.USER)))
                 .isInstanceOf(EntityNotFoundException.class)
                 .hasMessage("Объявление с id: 99 не найдено");
+    }
+
+    @Test
+    void adminListCarriesSellerUsername()
+    {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(repository.findWithSellerByStatus(ListingStatus.DRAFT, pageable)).thenReturn(new PageImpl<>(List.of(listing()), pageable, 1));
+
+        Page<AdminListingDto> result = service.findAllForAdmin(ListingStatus.DRAFT, pageable);
+
+        assertThat(result.getContent()).extracting(AdminListingDto::sellerUsername).containsExactly("u7");
+        assertThat(result.getContent().get(0).listing().id()).isEqualTo(1L);
+        verify(repository, never()).findAllWithSeller(any());
+    }
+
+    @Test
+    void adminListWithoutStatusTakesAll()
+    {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(repository.findAllWithSeller(pageable)).thenReturn(Page.empty());
+
+        service.findAllForAdmin(null, pageable);
+
+        verify(repository).findAllWithSeller(pageable);
     }
 
     @Test

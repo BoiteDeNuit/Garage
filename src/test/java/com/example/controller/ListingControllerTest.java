@@ -1,5 +1,6 @@
 package com.example.controller;
 
+import com.example.dto.AdminListingDto;
 import com.example.dto.ListingDto;
 import com.example.dto.ListingRequest;
 import com.example.dto.ListingUpdateRequest;
@@ -53,7 +54,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 // Срез с настоящей безопасностью: SecurityConfig и JwtAuthFilter работают, замоканы только их зависимости
-@WebMvcTest(ListingController.class)
+@WebMvcTest({ListingController.class, AdminListingController.class})
 @Import({SecurityConfig.class, SecurityErrorWriter.class})
 class ListingControllerTest {
     @Autowired
@@ -328,6 +329,42 @@ class ListingControllerTest {
                 .andExpect(status().isUnauthorized());
 
         verify(service, never()).delete(any(), any());
+    }
+
+    @Test
+    void adminListIsClosedForAnonymousAndUsers() throws Exception
+    {
+        mockMvc.perform(get("/api/admin/listings")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/admin/listings").with(user(seller)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Недостаточно прав"));
+
+        verify(service, never()).findAllForAdmin(any(), any());
+    }
+
+    @Test
+    void adminGetsListWithStatusAndDefaultSort() throws Exception
+    {
+        AppUserPrincipal admin = new AppUserPrincipal(1L, "boss", "!", Role.ADMIN);
+        when(service.findAllForAdmin(any(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(new AdminListingDto(card(1L), "seller")), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/admin/listings").param("status", "ARCHIVED").with(user(admin)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].sellerUsername").value("seller"))
+                .andExpect(jsonPath("$.content[0].listing.id").value(1));
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(service).findAllForAdmin(eq(ListingStatus.ARCHIVED), captor.capture());
+        assertThat(captor.getValue().getSort()).isEqualTo(Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
+    }
+
+    @Test
+    void unknownStatusIs400() throws Exception
+    {
+        AppUserPrincipal admin = new AppUserPrincipal(1L, "boss", "!", Role.ADMIN);
+
+        mockMvc.perform(get("/api/admin/listings").param("status", "BLOCKED").with(user(admin)))
+                .andExpect(status().isBadRequest());
     }
 
     private ListingUpdateRequest edit(Long version)

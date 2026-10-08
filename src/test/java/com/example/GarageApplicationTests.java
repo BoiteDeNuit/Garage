@@ -14,7 +14,10 @@ import com.example.support.IntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.Ordered;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
+import org.springframework.security.authorization.AuthorizationDeniedException;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.aop.Advisor;
 import org.springframework.aop.framework.Advised;
@@ -26,6 +29,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.timeout;
@@ -272,6 +276,32 @@ class GarageApplicationTests extends IntegrationTest {
         mockMvc.perform(get("/api/listings/" + id))
                 .andExpect(jsonPath("$.price").value(3900000.00))
                 .andExpect(jsonPath("$.version").value(2));
+    }
+
+    @Test
+    void adminSeesAllStatusesWithSellerUsername() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        Long archived = insertListing(seller, uniqueBrand(), ListingStatus.ARCHIVED);
+
+        mockMvc.perform(get("/api/admin/listings")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/admin/listings").header("Authorization", bearer(seller)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Недостаточно прав"));
+        // база общая для всех тестов: ищем своё объявление по id, а не по позиции
+        mockMvc.perform(get("/api/admin/listings").header("Authorization", bearer(admin()))
+                        .param("status", "ARCHIVED").param("size", "100").param("sort", "createdAt,desc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[?(@.listing.id == " + archived + ")].sellerUsername").value(seller.getUsername()));
+    }
+
+    // Второй уровень: даже если URL-правило забудут, сервис сам не пустит не-админа
+    @Test
+    @WithMockUser(roles = "USER")
+    void adminServiceMethodIsProtected()
+    {
+        assertThatThrownBy(() -> listingService.findAllForAdmin(null, PageRequest.of(0, 10)))
+                .isInstanceOf(AuthorizationDeniedException.class);
     }
 
     @Test

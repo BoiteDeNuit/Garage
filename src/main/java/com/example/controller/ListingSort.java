@@ -17,6 +17,10 @@ public final class ListingSort {
     {
         return checked(pageable, Sort.by(Sort.Direction.DESC, "publishedAt"));
     }
+    public static Pageable forAdminList(Pageable pageable)
+    {
+        return checked(pageable, Sort.by(Sort.Direction.DESC, "createdAt"));
+    }
     private static Pageable checked(Pageable pageable, Sort defaultSort)
     {
         // Смещение страницы считается в int: page=30000000 при size=100 переполнил бы его и дал 500

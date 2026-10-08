@@ -6,6 +6,8 @@ import com.example.model.ListingDetails;
 import com.example.model.ListingStatus;
 import com.example.model.Role;
 import jakarta.persistence.PersistenceException;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,7 +29,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.*;
 
-@DataJpaTest
+@DataJpaTest(properties = "spring.jpa.properties.hibernate.generate_statistics=true")
 @Testcontainers
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class PostgresRepositoryTest {
@@ -192,6 +194,61 @@ class PostgresRepositoryTest {
                 .executeUpdate())
                 .isInstanceOf(PersistenceException.class)
                 .hasMessageContaining("chk_listings_status");
+    }
+
+    // N+1: страница из 10 объявлений от 10 разных продавцов. С графом продавцы приходят тем же запросом:
+    // 2 SQL (страница и count). flush + clear обязательны: иначе продавцы уже лежат в persistence context
+    // и запросов не будет даже без графа, тест ничего бы не доказал
+    @Test
+    void adminPageLoadsSellersWithoutNPlusOne()
+    {
+        Statistics statistics = prepareTwentyFiveSellers();
+
+        Page<Listing> page = listingRepository.findAllWithSeller(PageRequest.of(0, 10, Sort.by("id")));
+        page.getContent().forEach(listing -> listing.getSeller().getUsername());
+
+        assertThat(page.getContent()).hasSize(10);
+        assertThat(statistics.getPrepareStatementCount()).isEqualTo(2);
+    }
+
+    // Контроль: тот же сценарий без графа. Страница, count и по запросу на каждого продавца
+    @Test
+    void withoutEntityGraphItIsNPlusOne()
+    {
+        Statistics statistics = prepareTwentyFiveSellers();
+
+        Page<Listing> page = listingRepository.findAll(PageRequest.of(0, 10, Sort.by("id")));
+        page.getContent().forEach(listing -> listing.getSeller().getUsername());
+
+        assertThat(statistics.getPrepareStatementCount()).isEqualTo(12);
+    }
+
+    @Test
+    void adminPageFiltersByStatusWithSellers()
+    {
+        listingRepository.save(active("Toyota", "Supra", 320, 1998));
+        listingRepository.save(draft("Lada", "Niva", 83, 2020));
+        entityManager.flush();
+        entityManager.clear();
+
+        Page<Listing> page = listingRepository.findWithSellerByStatus(ListingStatus.DRAFT, PageRequest.of(0, 10));
+
+        assertThat(page.getContent()).extracting(Listing::getModel).containsExactly("Niva");
+        assertThat(page.getContent().get(0).getSeller().getUsername()).isEqualTo("seller");
+    }
+
+    private Statistics prepareTwentyFiveSellers()
+    {
+        for (int i = 0; i < 25; i++)
+        {
+            AppUser owner = userRepository.save(new AppUser("owner" + i, "!", Role.USER));
+            listingRepository.save(Listing.draft(owner, new ListingDetails("Lada", "Vesta", null, 106, 2021, 30000, null, null, null), Instant.now()));
+        }
+        entityManager.flush();
+        entityManager.clear();
+        Statistics statistics = entityManager.getEntityManager().getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
+        statistics.clear();
+        return statistics;
     }
 
     private Listing draft(String brand, String model, int horsePower, int year)

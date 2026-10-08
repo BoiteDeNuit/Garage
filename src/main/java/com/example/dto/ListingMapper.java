@@ -13,6 +13,11 @@ public class ListingMapper {
                 listing.getMileageKm(), listing.getPrice(), listing.getCity(), listing.getDescription(),
                 listing.getCreatedAt(), listing.getUpdatedAt(), listing.getPublishedAt(), listing.getVersion());
     }
+    // Продавец должен быть уже загружен (@EntityGraph), иначе getUsername() даст по запросу на каждую строку
+    public static AdminListingDto toAdminDto(Listing listing)
+    {
+        return new AdminListingDto(toDto(listing), listing.getSeller().getUsername());
+    }
     public static ListingDetails toDetails(ListingRequest request)
     {
         return new ListingDetails(request.brand(), request.model(), request.engineCode(),

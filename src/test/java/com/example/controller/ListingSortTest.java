@@ -22,6 +22,14 @@ class ListingSortTest {
     }
 
     @Test
+    void adminDefaultIsNewestCreatedFirst()
+    {
+        Pageable result = ListingSort.forAdminList(PageRequest.of(0, 20));
+
+        assertThat(result.getSort()).isEqualTo(Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
+    }
+
+    @Test
     void idIsNotAddedTwice()
     {
         Pageable result = ListingSort.forPublicFeed(PageRequest.of(0, 20, Sort.by(Sort.Order.asc("id"))));
