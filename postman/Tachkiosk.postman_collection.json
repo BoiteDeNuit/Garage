@@ -413,7 +413,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"price\": null,\n  \"city\": null,\n  \"description\": \"Один владелец\"\n}",
+              "raw": "{\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"fuelType\": \"PETROL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": null,\n  \"city\": null,\n  \"description\": \"Один владелец\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -585,6 +585,7 @@
                   "const listing = pm.response.json();",
                   "pm.test(\"версия выросла\", () => pm.expect(listing.version).to.eql(pm.collectionVariables.get(\"listingVersion\") + 1));",
                   "pm.test(\"цена записана\", () => pm.expect(listing.price).to.eql(4500000.00));",
+                  "pm.test(\"характеристики записаны\", () => pm.expect([listing.fuelType, listing.transmission, listing.bodyType]).to.eql([\"PETROL\", \"MANUAL\", \"COUPE\"]));",
                   "pm.collectionVariables.set(\"staleVersion\", pm.collectionVariables.get(\"listingVersion\"));",
                   "pm.collectionVariables.set(\"listingVersion\", listing.version);"
                 ]
@@ -622,7 +623,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"version\": {{listingVersion}},\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Один владелец\"\n}",
+              "raw": "{\n  \"version\": {{listingVersion}},\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"fuelType\": \"PETROL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Один владелец\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -676,7 +677,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"version\": {{staleVersion}},\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 160000,\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Один владелец\"\n}",
+              "raw": "{\n  \"version\": {{staleVersion}},\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 160000,\n  \"fuelType\": \"PETROL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Один владелец\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -859,6 +860,59 @@
                   "value": "50"
                 }
               ]
+            }
+          }
+        },
+        {
+          "name": "Топливо не из списка — 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"подсказка со списком\", () => pm.expect(pm.response.json().message).to.eql(\"Поле fuelType: допустимые значения PETROL, DIESEL, HYBRID, ELECTRIC, GAS\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{buyerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/listings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"fuelType\": \"COAL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Один владелец\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -1145,7 +1199,7 @@
             "description": "Версия актуальная, отказ именно из-за статуса",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"version\": {{listingVersion}},\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Один владелец\"\n}",
+              "raw": "{\n  \"version\": {{listingVersion}},\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"fuelType\": \"PETROL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Один владелец\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1285,7 +1339,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Один владелец\"\n}",
+              "raw": "{\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"fuelType\": \"PETROL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Один владелец\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1468,7 +1522,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Один владелец\"\n}",
+              "raw": "{\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"fuelType\": \"PETROL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Один владелец\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

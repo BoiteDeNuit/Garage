@@ -1,16 +1,21 @@
 package com.example.repository;
 
 import com.example.model.AppUser;
+import com.example.model.BodyType;
+import com.example.model.FuelType;
 import com.example.model.Listing;
 import com.example.model.ListingDetails;
 import com.example.model.ListingStatus;
 import com.example.model.Role;
+import com.example.model.Transmission;
 import jakarta.persistence.PersistenceException;
 import org.hibernate.Hibernate;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
@@ -173,7 +178,7 @@ class PostgresRepositoryTest {
         AppUser other = userRepository.save(new AppUser("other", "!", Role.USER));
         listingRepository.save(draft("Toyota", "Supra", 320, 1998));
         listingRepository.save(active("BMW", "M4", 510, 2024));
-        listingRepository.save(Listing.draft(other, new ListingDetails("Lada", "Niva", null, 83, 2020, 50000, null, null, null), Instant.now()));
+        listingRepository.save(Listing.draft(other, new ListingDetails("Lada", "Niva", null, 83, 2020, 50000, null, null, null, null, null, null), Instant.now()));
         entityManager.flush();
 
         assertThat(listingRepository.findBySellerId(seller.getId(), PageRequest.of(0, 10)).getContent())
@@ -257,6 +262,44 @@ class PostgresRepositoryTest {
         assertThat(page.getContent().get(0).getSeller().getUsername()).isEqualTo("seller");
     }
 
+    // Списки в enum и в CHECK из V9 ведутся руками. Тест падает, если значение есть в коде, но база его не примет
+    @Test
+    void everySpecValueFitsDatabaseCheck()
+    {
+        for (FuelType fuel : FuelType.values())
+        {
+            listingRepository.save(withSpecs(fuel, null, null));
+        }
+        for (Transmission transmission : Transmission.values())
+        {
+            listingRepository.save(withSpecs(null, transmission, null));
+        }
+        for (BodyType body : BodyType.values())
+        {
+            listingRepository.save(withSpecs(null, null, body));
+        }
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(listingRepository.findAll())
+                .extracting(Listing::getFuelType)
+                .containsAll(List.of(FuelType.values()));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"fuel_type, chk_listings_fuel_type", "transmission, chk_listings_transmission", "body_type, chk_listings_body_type"})
+    void unknownSpecIsRejected(String column, String constraint)
+    {
+        Long id = listingRepository.save(draft("Lada", "Niva", 83, 2020)).getId();
+        entityManager.flush();
+
+        assertThatThrownBy(() -> entityManager.getEntityManager()
+                .createNativeQuery("update listings set " + column + " = 'COAL' where id = " + id)
+                .executeUpdate())
+                .isInstanceOf(PersistenceException.class)
+                .hasMessageContaining(constraint);
+    }
+
     // clear между загрузками: второй findById идёт в базу и собирает новый объект, как в другом persistence context
     @Test
     void sameRowFromTwoPersistenceContextsIsOneListing()
@@ -332,7 +375,7 @@ class PostgresRepositoryTest {
         for (int i = 0; i < 25; i++)
         {
             AppUser owner = userRepository.save(new AppUser("owner" + i, "!", Role.USER));
-            listingRepository.save(Listing.draft(owner, new ListingDetails("Lada", "Vesta", null, 106, 2021, 30000, null, null, null), Instant.now()));
+            listingRepository.save(Listing.draft(owner, new ListingDetails("Lada", "Vesta", null, 106, 2021, 30000, null, null, null, null, null, null), Instant.now()));
         }
         entityManager.flush();
         entityManager.clear();
@@ -343,12 +386,17 @@ class PostgresRepositoryTest {
 
     private Listing draft(String brand, String model, int horsePower, int year)
     {
-        return Listing.draft(seller, new ListingDetails(brand, model, null, horsePower, year, 50000, new BigDecimal("8500000"), "Самара", null), Instant.now());
+        return Listing.draft(seller, new ListingDetails(brand, model, null, horsePower, year, 50000, null, null, null, new BigDecimal("8500000"), "Самара", null), Instant.now());
+    }
+
+    private Listing withSpecs(FuelType fuel, Transmission transmission, BodyType body)
+    {
+        return Listing.draft(seller, new ListingDetails("Lada", "Niva", null, 83, 2020, 50000, fuel, transmission, body, null, null, null), Instant.now());
     }
 
     private Listing draftWithoutPrice()
     {
-        return Listing.draft(seller, new ListingDetails("Lada", "Niva", null, 83, 2020, 50000, null, "Самара", null), Instant.now());
+        return Listing.draft(seller, new ListingDetails("Lada", "Niva", null, 83, 2020, 50000, null, null, null, null, "Самара", null), Instant.now());
     }
 
     // Публикации в сущности пока нет: статус и дату ставим напрямую, как это сделает будущий publish

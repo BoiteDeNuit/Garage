@@ -1,5 +1,8 @@
 package com.example.dto;
 
+import com.example.model.BodyType;
+import com.example.model.FuelType;
+import com.example.model.Transmission;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
 
@@ -31,6 +34,12 @@ public record ListingRequest(
         @PositiveOrZero(message = "Пробег не может быть отрицательным")
         @Max(value = 2_000_000,message = "Пробег неправдоподобно велик")
         Integer mileageKm,
+        @Schema(example = "PETROL", description = "Необязательно")
+        FuelType fuelType,
+        @Schema(example = "MANUAL", description = "Необязательно")
+        Transmission transmission,
+        @Schema(example = "COUPE", description = "Необязательно")
+        BodyType bodyType,
         @Schema(example = "4500000", description = "Для черновика можно не указывать")
         @Positive(message = "Цена должна быть больше нуля")
         @Digits(integer = 10, fraction = 2, message = "Цена: не больше 10 знаков до запятой и 2 после")

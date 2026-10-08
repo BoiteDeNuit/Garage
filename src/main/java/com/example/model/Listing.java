@@ -25,6 +25,15 @@ public class Listing {
     private int horsePower;
     private int year;
     private Integer mileageKm;
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private FuelType fuelType;
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private Transmission transmission;
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private BodyType bodyType;
     @Column(precision = 12,scale = 2)
     private BigDecimal price;
     @Column(length = 100)
@@ -116,6 +125,9 @@ public class Listing {
         this.horsePower=details.horsePower();
         this.year=details.year();
         this.mileageKm=details.mileageKm();
+        this.fuelType=details.fuelType();
+        this.transmission=details.transmission();
+        this.bodyType=details.bodyType();
         // Масштаб как у колонки numeric(12,2): ответ на POST совпадает с тем, что потом отдаст GET.
         // Больше двух знаков после запятой сюда не доходит, это отсекает @Digits в запросе
         this.price=details.price() == null ? null : details.price().setScale(2);
@@ -157,6 +169,18 @@ public class Listing {
 
     public Integer getMileageKm() {
         return mileageKm;
+    }
+
+    public FuelType getFuelType() {
+        return fuelType;
+    }
+
+    public Transmission getTransmission() {
+        return transmission;
+    }
+
+    public BodyType getBodyType() {
+        return bodyType;
     }
 
     public BigDecimal getPrice() {

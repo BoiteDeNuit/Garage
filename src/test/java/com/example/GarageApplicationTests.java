@@ -10,8 +10,11 @@ import com.example.dto.UserDto;
 import com.example.exception.UsernameTakenException;
 import com.example.event.ListingPublishedEvent;
 import com.example.model.AppUser;
+import com.example.model.BodyType;
+import com.example.model.FuelType;
 import com.example.model.ListingStatus;
 import com.example.model.Role;
+import com.example.model.Transmission;
 import com.example.service.AuthService;
 import com.example.service.ListingService;
 import com.example.support.IntegrationTest;
@@ -298,13 +301,44 @@ class GarageApplicationTests extends IntegrationTest {
                 .andExpect(jsonPath("$.message").value("Слишком большой номер страницы"));
     }
 
+    // Характеристики проходят через POST, базу и GET как строки enum и стираются PUT без них
+    @Test
+    void specsGoThroughApi() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        String brand = uniqueBrand();
+        Long id = create(seller, new ListingRequest(brand, "Supra", "2JZ", 320, 1998, 154000,
+                FuelType.PETROL, Transmission.MANUAL, BodyType.COUPE, new BigDecimal("4500000"), "Самара", null));
+
+        mockMvc.perform(get("/api/listings/" + id).header("Authorization", bearer(seller)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fuelType").value("PETROL"))
+                .andExpect(jsonPath("$.transmission").value("MANUAL"))
+                .andExpect(jsonPath("$.bodyType").value("COUPE"));
+        assertThat(jdbcTemplate.queryForObject("select fuel_type from listings where id = ?", String.class, id)).isEqualTo("PETROL");
+
+        edit(id, seller, new ListingUpdateRequest(0L, brand, "Supra", "2JZ", 320, 1998, 154000,
+                FuelType.DIESEL, Transmission.AUTOMATIC, BodyType.SEDAN, new BigDecimal("4500000"), "Самара", null))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fuelType").value("DIESEL"))
+                .andExpect(jsonPath("$.transmission").value("AUTOMATIC"))
+                .andExpect(jsonPath("$.bodyType").value("SEDAN"));
+        assertThat(jdbcTemplate.queryForObject("select body_type from listings where id = ?", String.class, id)).isEqualTo("SEDAN");
+
+        edit(id, seller, new ListingUpdateRequest(1L, brand, "Supra", "2JZ", 320, 1998, 154000, null, null, null, new BigDecimal("4500000"), "Самара", null))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fuelType").isEmpty())
+                .andExpect(jsonPath("$.transmission").isEmpty())
+                .andExpect(jsonPath("$.bodyType").isEmpty());
+    }
+
     @Test
     void listingLifecycleThroughApi() throws Exception
     {
         AppUser seller = createUser(Role.USER);
         AppUser stranger = createUser(Role.USER);
         String brand = uniqueBrand();
-        Long withoutPrice = create(seller, new ListingRequest(brand, "Supra", "2JZ", 320, 1998, 154000, null, "Самара", null));
+        Long withoutPrice = create(seller, new ListingRequest(brand, "Supra", "2JZ", 320, 1998, 154000, null, null, null, null, "Самара", null));
         change(withoutPrice, "publish", seller)
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Для публикации нужна цена"));
@@ -352,7 +386,7 @@ class GarageApplicationTests extends IntegrationTest {
         Long id = create(seller, supra(brand));
         mockMvc.perform(get("/api/listings/" + id).header("Authorization", bearer(seller))).andExpect(status().isOk());
 
-        edit(id, seller, new ListingUpdateRequest(0L, brand, "Supra", "2JZ", 330, 1998, 160000, new BigDecimal("3900000"), "Тольятти", null))
+        edit(id, seller, new ListingUpdateRequest(0L, brand, "Supra", "2JZ", 330, 1998, 160000, null, null, null, new BigDecimal("3900000"), "Тольятти", null))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.version").value(1))
                 .andExpect(jsonPath("$.price").value(3900000.00))
@@ -362,15 +396,15 @@ class GarageApplicationTests extends IntegrationTest {
                 .andExpect(jsonPath("$.city").value("Тольятти"));
 
         // вторая вкладка с формой, открытой до правки
-        edit(id, seller, new ListingUpdateRequest(0L, brand, "Supra", "2JZ", 330, 1998, 160000, new BigDecimal("1000000"), "Самара", null))
+        edit(id, seller, new ListingUpdateRequest(0L, brand, "Supra", "2JZ", 330, 1998, 160000, null, null, null, new BigDecimal("1000000"), "Самара", null))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Объявление уже изменили, актуальная версия 1. Обновите и повторите"));
 
         change(id, "publish", seller).andExpect(status().isOk());
-        edit(id, seller, new ListingUpdateRequest(2L, brand, "Supra", "2JZ", 330, 1998, 160000, null, "Самара", null))
+        edit(id, seller, new ListingUpdateRequest(2L, brand, "Supra", "2JZ", 330, 1998, 160000, null, null, null, null, "Самара", null))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("У опубликованного объявления должны быть цена и город"));
-        edit(id, stranger, new ListingUpdateRequest(2L, brand, "Supra", "2JZ", 330, 1998, 160000, new BigDecimal("1"), "Самара", null))
+        edit(id, stranger, new ListingUpdateRequest(2L, brand, "Supra", "2JZ", 330, 1998, 160000, null, null, null, new BigDecimal("1"), "Самара", null))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/listings/" + id))
                 .andExpect(jsonPath("$.price").value(3900000.00))
@@ -579,6 +613,6 @@ class GarageApplicationTests extends IntegrationTest {
 
     private ListingRequest supra(String brand)
     {
-        return new ListingRequest(brand, "Supra", "2JZ", 320, 1998, 154000, new BigDecimal("4500000"), "Самара", "Один владелец");
+        return new ListingRequest(brand, "Supra", "2JZ", 320, 1998, 154000, null, null, null, new BigDecimal("4500000"), "Самара", "Один владелец");
     }
 }

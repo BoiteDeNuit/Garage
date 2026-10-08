@@ -22,6 +22,12 @@ spring:
         pageable:
           max-page-size: 100
           serialization-mode: via-dto
+  # Число вместо имени ("fuelType": 1) Jackson по умолчанию принимает как номер константы.
+  # Тогда порядок в enum стал бы частью API, а новое значение в середине списка тихо меняло бы смысл
+  jackson:
+    datatype:
+      enum:
+        fail-on-numbers-for-enums: true
   cache:
     cache-names: listings
     redis:

@@ -20,7 +20,10 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import tools.jackson.databind.exc.InvalidFormatException;
+
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.stream.Collectors;
 
 @RestControllerAdvice
@@ -71,6 +74,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> notReadable(HttpMessageNotReadableException e,HttpServletRequest request)
     {
+        // Значение не из списка: подсказываем, что можно прислать. Само значение не повторяем
+        if(e.getCause() instanceof InvalidFormatException invalid
+                && invalid.getTargetType() != null && invalid.getTargetType().isEnum() && !invalid.getPath().isEmpty())
+        {
+            String field = invalid.getPath().getLast().getPropertyName();
+            String allowed = Arrays.stream(invalid.getTargetType().getEnumConstants())
+                    .map(Object::toString)
+                    .collect(Collectors.joining(", "));
+            return build(HttpStatus.BAD_REQUEST,"Поле " + field + ": допустимые значения " + allowed,request);
+        }
         return build(HttpStatus.BAD_REQUEST,"Некорректный формат запроса",request);
     }
     // Без этого обработчика отказ из сервиса попадал бы в Exception.class и становился 500.

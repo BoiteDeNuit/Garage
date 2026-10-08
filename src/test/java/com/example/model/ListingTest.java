@@ -209,6 +209,27 @@ class ListingTest {
         assertThatThrownBy(listing::checkDeletable).isInstanceOf(ListingStateException.class);
     }
 
+    // PUT заменяет всё описание: характеристика, которую не прислали, стирается
+    @Test
+    void specsAreSetAndClearedByEdit()
+    {
+        Listing listing = draft(null, null);
+        ListingDetails withSpecs = new ListingDetails("Toyota", "Supra", "2JZ", 330, 1998, 160000,
+                FuelType.PETROL, Transmission.MANUAL, BodyType.COUPE, null, null, null);
+
+        listing.updateDetails(withSpecs, LATER);
+
+        assertThat(listing.getFuelType()).isEqualTo(FuelType.PETROL);
+        assertThat(listing.getTransmission()).isEqualTo(Transmission.MANUAL);
+        assertThat(listing.getBodyType()).isEqualTo(BodyType.COUPE);
+
+        listing.updateDetails(details(null, null), LATER);
+
+        assertThat(listing.getFuelType()).isNull();
+        assertThat(listing.getTransmission()).isNull();
+        assertThat(listing.getBodyType()).isNull();
+    }
+
     @Test
     void newDraftsWithSameDetailsAreDifferent()
     {
@@ -263,12 +284,12 @@ class ListingTest {
 
     private Listing draft(BigDecimal price, String city)
     {
-        return Listing.draft(seller, new ListingDetails("Toyota", "Supra", "2JZ", 320, 1998, 154000, price, city, null), CREATED);
+        return Listing.draft(seller, new ListingDetails("Toyota", "Supra", "2JZ", 320, 1998, 154000, null, null, null, price, city, null), CREATED);
     }
 
     private ListingDetails details(BigDecimal price, String city)
     {
-        return new ListingDetails("Toyota", "Supra", "2JZ", 330, 1998, 160000, price, city, "Свежее ТО");
+        return new ListingDetails("Toyota", "Supra", "2JZ", 330, 1998, 160000, null, null, null, price, city, "Свежее ТО");
     }
 
     private Listing published()

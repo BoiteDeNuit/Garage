@@ -15,6 +15,8 @@ import com.example.security.SecurityConfig;
 import com.example.security.SecurityErrorWriter;
 import com.example.service.ListingService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -38,6 +40,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -139,7 +142,7 @@ class ListingControllerTest {
     @Test
     void invalidListingIs400() throws Exception
     {
-        ListingRequest invalid = new ListingRequest("", "Supra", "2JZ", 0, 1998, 150000, new BigDecimal("12345678901"), "Самара", null);
+        ListingRequest invalid = new ListingRequest("", "Supra", "2JZ", 0, 1998, 150000, null, null, null, new BigDecimal("12345678901"), "Самара", null);
 
         mockMvc.perform(post("/api/listings").with(user(seller))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -149,6 +152,49 @@ class ListingControllerTest {
                 .andExpect(jsonPath("$.message").value(containsString("Цена")));
 
         verify(service, never()).create(any(), any());
+    }
+
+    // Значение не из списка ловит Jackson ещё до валидации. Ответ подсказывает, что можно прислать
+    @Test
+    void unknownFuelTypeIs400WithAllowedValues() throws Exception
+    {
+        String body = objectMapper.writeValueAsString(supra()).replace("\"fuelType\":null", "\"fuelType\":\"COAL\"");
+
+        mockMvc.perform(post("/api/listings").with(user(seller))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Поле fuelType: допустимые значения PETROL, DIESEL, HYBRID, ELECTRIC, GAS"));
+
+        verify(service, never()).create(any(), any());
+    }
+
+    // Номер вместо имени: без fail-on-numbers-for-enums 1 молча стал бы DIESEL
+    @ParameterizedTest
+    @ValueSource(strings = {"1", "\"1\""})
+    void fuelTypeAsNumberIs400(String value) throws Exception
+    {
+        String body = objectMapper.writeValueAsString(supra()).replace("\"fuelType\":null", "\"fuelType\":" + value);
+
+        mockMvc.perform(post("/api/listings").with(user(seller))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(startsWith("Поле fuelType: допустимые значения")));
+
+        verify(service, never()).create(any(), any());
+    }
+
+    // Ошибка формата не про enum (строка в числовом поле, битый JSON) — общий ответ, тело в том же формате
+    @ParameterizedTest
+    @ValueSource(strings = {"{\"brand\":\"Toyota\",\"year\":\"abc\"}", "{\"brand\":"})
+    void otherFormatErrorsGetGenericMessage(String body) throws Exception
+    {
+        mockMvc.perform(post("/api/listings").with(user(seller))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Некорректный формат запроса"));
     }
 
     @Test
@@ -403,18 +449,18 @@ class ListingControllerTest {
 
     private ListingUpdateRequest edit(Long version)
     {
-        return new ListingUpdateRequest(version, "Toyota", "Supra", "2JZ", 320, 1998, 154000, new BigDecimal("4400000"), "Самара", null);
+        return new ListingUpdateRequest(version, "Toyota", "Supra", "2JZ", 320, 1998, 154000, null, null, null, new BigDecimal("4400000"), "Самара", null);
     }
 
     private ListingRequest supra()
     {
-        return new ListingRequest("Toyota", "Supra", "2JZ", 320, 1998, 154000, new BigDecimal("4500000"), "Самара", null);
+        return new ListingRequest("Toyota", "Supra", "2JZ", 320, 1998, 154000, null, null, null, new BigDecimal("4500000"), "Самара", null);
     }
 
     private ListingDto card(Long id)
     {
         Instant now = Instant.parse("2026-10-07T12:00:00Z");
-        return new ListingDto(id, 7L, ListingStatus.ACTIVE, "Toyota", "Supra", "2JZ", 320, 1998, 154000,
+        return new ListingDto(id, 7L, ListingStatus.ACTIVE, "Toyota", "Supra", "2JZ", 320, 1998, 154000, null, null, null,
                 new BigDecimal("4500000"), "Самара", null, now, now, now, 1L);
     }
 }

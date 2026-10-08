@@ -184,7 +184,7 @@ class ListingServiceTest {
     @Test
     void rejectedPublishSendsNoEvent()
     {
-        Listing withoutPrice = Listing.draft(user(7L), new ListingDetails("Lada", "Niva", "21214", 83, 2020, 50000, null, "Самара", null), NOW);
+        Listing withoutPrice = Listing.draft(user(7L), new ListingDetails("Lada", "Niva", "21214", 83, 2020, 50000, null, null, null, null, "Самара", null), NOW);
         when(repository.findById(1L)).thenReturn(Optional.of(withoutPrice));
 
         assertThatThrownBy(() -> service.publish(1L, principal(7L, Role.USER)))
@@ -531,7 +531,7 @@ class ListingServiceTest {
     @Test
     void priceWithoutPriceIs404()
     {
-        Listing listing = Listing.draft(user(7L), new ListingDetails("Lada", "Niva", "21214", 83, 2020, 50000, null, null, null), NOW);
+        Listing listing = Listing.draft(user(7L), new ListingDetails("Lada", "Niva", "21214", 83, 2020, 50000, null, null, null, null, null, null), NOW);
         when(repository.findByIdAndStatusIn(eq(1L), anyCollection())).thenReturn(Optional.of(listing));
 
         assertThatThrownBy(() -> service.priceIn(1L, "USD"))
@@ -542,24 +542,24 @@ class ListingServiceTest {
 
     private ListingRequest request()
     {
-        return new ListingRequest("Toyota", "Supra", "2JZ", 320, 1998, 154000, new BigDecimal("4500000"), "Самара", null);
+        return new ListingRequest("Toyota", "Supra", "2JZ", 320, 1998, 154000, null, null, null, new BigDecimal("4500000"), "Самара", null);
     }
 
     private ListingUpdateRequest update(Long version, BigDecimal price)
     {
-        return new ListingUpdateRequest(version, "Toyota", "Supra", "2JZ", 330, 1998, 160000, price, "Самара", null);
+        return new ListingUpdateRequest(version, "Toyota", "Supra", "2JZ", 330, 1998, 160000, null, null, null, price, "Самара", null);
     }
 
     private Listing listing()
     {
-        Listing listing = Listing.draft(user(7L), new ListingDetails("Toyota", "Supra", "2JZ", 320, 1998, 154000, new BigDecimal("4500000"), "Самара", null), NOW);
+        Listing listing = Listing.draft(user(7L), new ListingDetails("Toyota", "Supra", "2JZ", 320, 1998, 154000, null, null, null, new BigDecimal("4500000"), "Самара", null), NOW);
         ReflectionTestUtils.setField(listing, "id", 1L);
         return listing;
     }
 
     private ListingDto card(ListingStatus status, Long sellerId)
     {
-        return new ListingDto(1L, sellerId, status, "Toyota", "Supra", "2JZ", 320, 1998, 154000,
+        return new ListingDto(1L, sellerId, status, "Toyota", "Supra", "2JZ", 320, 1998, 154000, null, null, null,
                 new BigDecimal("4500000"), "Самара", null, NOW, NOW, null, 0L);
     }
 

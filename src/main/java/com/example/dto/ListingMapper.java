@@ -10,7 +10,7 @@ public class ListingMapper {
     {
         return new ListingDto(listing.getId(), listing.getSeller().getId(), listing.getStatus(),
                 listing.getBrand(), listing.getModel(), listing.getEngineCode(), listing.getHorsePower(), listing.getYear(),
-                listing.getMileageKm(), listing.getPrice(), listing.getCity(), listing.getDescription(),
+                listing.getMileageKm(), listing.getFuelType(), listing.getTransmission(), listing.getBodyType(), listing.getPrice(), listing.getCity(), listing.getDescription(),
                 listing.getCreatedAt(), listing.getUpdatedAt(), listing.getPublishedAt(), listing.getVersion());
     }
     // Продавец должен быть уже загружен (@EntityGraph), иначе getUsername() даст по запросу на каждую строку
@@ -22,12 +22,14 @@ public class ListingMapper {
     {
         return new ListingDetails(request.brand(), request.model(), request.engineCode(),
                 request.horsePower(), request.year(), request.mileageKm(),
+                request.fuelType(), request.transmission(), request.bodyType(),
                 request.price(), request.city(), request.description());
     }
     public static ListingDetails toDetails(ListingUpdateRequest request)
     {
         return new ListingDetails(request.brand(), request.model(), request.engineCode(),
                 request.horsePower(), request.year(), request.mileageKm(),
+                request.fuelType(), request.transmission(), request.bodyType(),
                 request.price(), request.city(), request.description());
     }
 }
