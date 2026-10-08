@@ -95,6 +95,11 @@ public class GlobalExceptionHandler {
     {
         return build(HttpStatus.CONFLICT,"Объявление изменили одновременно с вами, обновите и повторите",request);
     }
+    @ExceptionHandler(UsernameTakenException.class)
+    public ResponseEntity<ErrorResponse> usernameTaken(UsernameTakenException e, HttpServletRequest request)
+    {
+        return build(HttpStatus.CONFLICT,e.getMessage(),request);
+    }
     @ExceptionHandler(InvalidRequestException.class)
     public ResponseEntity<ErrorResponse> invalidRequest(InvalidRequestException e, HttpServletRequest request)
     {

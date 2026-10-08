@@ -5,10 +5,14 @@ import com.example.dto.ListingRequest;
 import com.example.dto.ListingUpdateRequest;
 import com.example.dto.LoginRequest;
 import com.example.dto.LoginResponse;
+import com.example.dto.RegisterRequest;
+import com.example.dto.UserDto;
+import com.example.exception.UsernameTakenException;
 import com.example.event.ListingPublishedEvent;
 import com.example.model.AppUser;
 import com.example.model.ListingStatus;
 import com.example.model.Role;
+import com.example.service.AuthService;
 import com.example.service.ListingService;
 import com.example.support.IntegrationTest;
 import org.junit.jupiter.api.Test;
@@ -25,8 +29,14 @@ import org.springframework.cache.interceptor.BeanFactoryCacheOperationSourceAdvi
 import org.springframework.transaction.interceptor.BeanFactoryTransactionAttributeSourceAdvisor;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -46,6 +56,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class GarageApplicationTests extends IntegrationTest {
     @Autowired
     ListingService listingService;
+    @Autowired
+    AuthService authService;
 
     @Test
     void sellerCreatesDraftVisibleOnlyToSellerAndAdmin() throws Exception
@@ -73,6 +85,80 @@ class GarageApplicationTests extends IntegrationTest {
         mockMvc.perform(get("/api/listings").param("brand", brand))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page.totalElements").value(0));
+    }
+
+    @Test
+    void registeredUserLogsInAndSellsCar() throws Exception
+    {
+        String username = "r" + uniqueBrand().toLowerCase();
+        String body = mockMvc.perform(post("/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new RegisterRequest(username, "correct-horse-battery"))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.role").value("USER"))
+                .andExpect(jsonPath("$.passwordHash").doesNotExist())
+                .andReturn().getResponse().getContentAsString();
+        Long userId = objectMapper.readValue(body, UserDto.class).id();
+
+        mockMvc.perform(post("/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new RegisterRequest(username, "another-password"))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Логин уже занят"));
+
+        String login = mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoginRequest(username, "correct-horse-battery"))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String token = objectMapper.readValue(login, LoginResponse.class).token();
+        assertThat(jwtService.extractRoles(token)).containsExactly("ROLE_USER");
+
+        mockMvc.perform(post("/api/listings")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(supra(uniqueBrand()))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.sellerId").value(userId));
+    }
+
+    // Две регистрации одного логина одновременно: обе проходят existsByUsername, базу пишет одна,
+    // вторая упирается в UNIQUE и должна получить 409, а не 500
+    @Test
+    void concurrentRegistrationGivesExactlyOneUser() throws Exception
+    {
+        for (int round = 0; round < 5; round++)
+        {
+            String username = "race" + round + uniqueBrand().toLowerCase();
+            CountDownLatch start = new CountDownLatch(1);
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+            List<Future<String>> results = new ArrayList<>();
+            for (int i = 0; i < 2; i++)
+            {
+                results.add(pool.submit(() -> {
+                    start.await();
+                    try
+                    {
+                        authService.register(new RegisterRequest(username, "correct-horse-battery"));
+                        return "ok";
+                    }
+                    catch (UsernameTakenException e)
+                    {
+                        return "taken";
+                    }
+                }));
+            }
+            start.countDown();
+            List<String> outcomes = new ArrayList<>();
+            for (Future<String> result : results)
+            {
+                outcomes.add(result.get(30, TimeUnit.SECONDS));
+            }
+            pool.shutdown();
+
+            assertThat(outcomes).containsExactlyInAnyOrder("ok", "taken");
+            assertThat(jdbcTemplate.queryForObject("select count(*) from users where username = ?", Long.class, username)).isEqualTo(1);
+        }
     }
 
     @Test

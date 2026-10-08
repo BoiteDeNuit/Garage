@@ -3,15 +3,19 @@ package com.example.controller;
 
 import com.example.dto.LoginRequest;
 import com.example.dto.LoginResponse;
+import com.example.dto.RegisterRequest;
+import com.example.dto.UserDto;
 import com.example.exception.TooManyRequestsException;
 import com.example.ratelimit.RateLimiter;
 import com.example.security.JwtService;
+import com.example.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -19,27 +23,41 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-@Tag(name = "Аутентификация",description = "Логин,Проверка роли")
+@Tag(name = "Аутентификация",description = "Регистрация и логин")
 @RestController
 @RequestMapping("/auth")
 public class AuthController {
     private final JwtService service;
     private final AuthenticationManager authManager;
     private final RateLimiter rateLimiter;
+    private final AuthService authService;
     private final int loginLimit;
     public AuthController(JwtService service,
                           AuthenticationManager authManager,
                           RateLimiter rateLimiter,
+                          AuthService authService,
                           @Value("${rate-limit.login.per-minute}") int loginLimit)
     {
         this.service=service;
         this.authManager=authManager;
         this.rateLimiter=rateLimiter;
+        this.authService=authService;
         this.loginLimit=loginLimit;
+    }
+    @Operation(summary = "Регистрация", description = "Роль всегда USER")
+    @ApiResponse(responseCode = "201", description = "Создан")
+    @ApiResponse(responseCode = "400", description = "Логин или пароль не подходят")
+    @ApiResponse(responseCode = "409", description = "Логин уже занят")
+    @PostMapping("/register")
+    @ResponseStatus(HttpStatus.CREATED)
+    public UserDto register(@Valid @RequestBody RegisterRequest request)
+    {
+        return authService.register(request);
     }
     @Operation(summary = "Получить токен")
     @ApiResponse(responseCode = "200", description = "OK")

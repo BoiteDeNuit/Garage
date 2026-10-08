@@ -36,6 +36,12 @@ public class AdminInitializer implements ApplicationRunner {
             throw new IllegalStateException("Не заданы ADMIN_USERNAME или ADMIN_PASSWORD");
         }
         repository.findByUsername(username).ifPresentOrElse(admin -> {
+            // Регистрация открыта: обычный пользователь мог занять этот логин раньше.
+            // Перезаписать ему пароль из .env значило бы отдать чужой аккаунт тому, у кого .env
+            if (admin.getRole() != Role.ADMIN)
+            {
+                throw new IllegalStateException("Пользователь " + username + " существует и не является администратором");
+            }
             if (!encoder.matches(password, admin.getPasswordHash()))
             {
                 admin.changePassword(encoder.encode(password));

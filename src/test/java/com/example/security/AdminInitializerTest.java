@@ -62,6 +62,21 @@ class AdminInitializerTest {
         verify(repository, never()).save(any());
     }
 
+    // Регистрация открыта: обычный пользователь мог занять логин админа раньше, чем его создали из .env
+    @Test
+    void refusesToHijackNonAdminUser()
+    {
+        String hash = encoder.encode("users-own-password");
+        AppUser user = new AppUser("boss", hash, Role.USER);
+        when(repository.findByUsername("boss")).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> new AdminInitializer(repository, encoder, "boss", "from-env").run(null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("не является администратором");
+        verify(repository, never()).save(any());
+        assertThat(user.getPasswordHash()).isEqualTo(hash);
+    }
+
     @Test
     void blankPasswordStopsStartup()
     {
