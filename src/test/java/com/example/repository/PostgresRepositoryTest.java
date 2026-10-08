@@ -6,6 +6,7 @@ import com.example.model.ListingDetails;
 import com.example.model.ListingStatus;
 import com.example.model.Role;
 import jakarta.persistence.PersistenceException;
+import org.hibernate.Hibernate;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,7 +26,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -252,6 +255,76 @@ class PostgresRepositoryTest {
 
         assertThat(page.getContent()).extracting(Listing::getModel).containsExactly("Niva");
         assertThat(page.getContent().get(0).getSeller().getUsername()).isEqualTo("seller");
+    }
+
+    // clear между загрузками: второй findById идёт в базу и собирает новый объект, как в другом persistence context
+    @Test
+    void sameRowFromTwoPersistenceContextsIsOneListing()
+    {
+        Long id = listingRepository.save(draft("Toyota", "Supra", 320, 1998)).getId();
+        entityManager.flush();
+        entityManager.clear();
+
+        Listing first = listingRepository.findById(id).orElseThrow();
+        entityManager.clear();
+        Listing second = listingRepository.findById(id).orElseThrow();
+
+        assertThat(second).isNotSameAs(first);
+        assertThat(second).isEqualTo(first);
+        assertThat(new HashSet<>(List.of(first, second))).hasSize(1);
+    }
+
+    // Прокси от getReference с пустыми полями. Сравнение с ним не грузит строку: id прокси отдаёт через геттер.
+    // В обратную сторону прокси сам инициализируется и отдаёт equals настоящему объекту
+    @Test
+    void listingEqualsProxyWithoutLoadingIt()
+    {
+        Long id = listingRepository.save(draft("Toyota", "Supra", 320, 1998)).getId();
+        entityManager.flush();
+        entityManager.clear();
+        Listing loaded = listingRepository.findById(id).orElseThrow();
+        entityManager.clear();
+
+        Listing proxy = entityManager.getEntityManager().getReference(Listing.class, id);
+
+        assertThat(proxy.getClass()).isNotEqualTo(Listing.class);
+        assertThat(loaded.equals(proxy)).isTrue();
+        assertThat(Hibernate.isInitialized(proxy)).isFalse();
+        assertThat(proxy.equals(loaded)).isTrue();
+    }
+
+    // Прокси пережил свой persistence context: сессии у него нет, загрузить он уже ничего не может.
+    // equals всё равно отвечает, а не бросает LazyInitializationException
+    @Test
+    void listingEqualsDetachedProxy()
+    {
+        Long id = listingRepository.save(draft("Toyota", "Supra", 320, 1998)).getId();
+        entityManager.flush();
+        entityManager.clear();
+        Listing loaded = listingRepository.findById(id).orElseThrow();
+        entityManager.clear();
+        Listing proxy = entityManager.getEntityManager().getReference(Listing.class, id);
+        AppUser sellerProxy = entityManager.getEntityManager().getReference(AppUser.class, seller.getId());
+        entityManager.clear();
+
+        assertThat(loaded.equals(proxy)).isTrue();
+        assertThat(loaded.equals(sellerProxy)).isFalse();
+        assertThat(Hibernate.isInitialized(proxy)).isFalse();
+    }
+
+    @Test
+    void listingStaysInHashSetAfterSave()
+    {
+        Listing listing = draft("Lada", "Niva", 83, 2020);
+        Set<Listing> set = new HashSet<>();
+        set.add(listing);
+
+        listingRepository.save(listing);
+        entityManager.flush();
+
+        assertThat(listing.getId()).isNotNull();
+        // set.contains, а не assertThat(set).contains: AssertJ перебирает элементы через equals и хэш не проверяет
+        assertThat(set.contains(listing)).isTrue();
     }
 
     private Statistics prepareTwentyFiveSellers()

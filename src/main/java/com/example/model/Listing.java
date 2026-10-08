@@ -186,6 +186,31 @@ public class Listing {
     public Long getVersion() {
         return version;
     }
+    // Равенство по id: одна строка, загруженная в двух persistence context, — одно объявление.
+    // Новое без id равно только самому себе. instanceof, а не сравнение классов: прокси Hibernate —
+    // наследник Listing. Hibernate.getClass ради класса грузит прокси select'ом, а getClassLazy
+    // падает на прокси без сессии. Своих наследников у Listing нет, поэтому instanceof тут точный
+    @Override
+    public boolean equals(Object o)
+    {
+        if(this == o)
+        {
+            return true;
+        }
+        if(!(o instanceof Listing other))
+        {
+            return false;
+        }
+        // getId(), а не other.id: поля у прокси пустые, id он отдаёт только через геттер
+        return id != null && id.equals(other.getId());
+    }
+    // Хэш один на класс: id появляется только при persist, хэш по id потерял бы объявление в HashSet.
+    // У прокси хэш тот же: Hibernate передаёт вызов настоящему объекту
+    @Override
+    public int hashCode()
+    {
+        return Listing.class.hashCode();
+    }
     // Без seller: иначе toString дёрнет ленивую загрузку продавца
     @Override
     public String toString()

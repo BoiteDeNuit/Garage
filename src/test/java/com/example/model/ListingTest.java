@@ -6,9 +6,12 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -204,6 +207,58 @@ class ListingTest {
                 .hasMessage("Удалить можно только черновик. Опубликованное объявление снимите в архив");
         listing.archive(LATER);
         assertThatThrownBy(listing::checkDeletable).isInstanceOf(ListingStateException.class);
+    }
+
+    @Test
+    void newDraftsWithSameDetailsAreDifferent()
+    {
+        Listing first = draft(new BigDecimal("4500000"), "Самара");
+        Listing second = draft(new BigDecimal("4500000"), "Самара");
+
+        assertThat(first).isEqualTo(first);
+        assertThat(first).isNotEqualTo(second);
+    }
+
+    // id больше 127: Long из кэша valueOf тут не выручит, сравнение через == дало бы false
+    @Test
+    void sameIdMeansSameListing()
+    {
+        Listing first = withId(draft(new BigDecimal("4500000"), "Самара"), 1000L);
+        Listing second = withId(draft(null, "Тольятти"), 1000L);
+        Listing third = withId(draft(new BigDecimal("4500000"), "Самара"), 1001L);
+
+        assertThat(first).isEqualTo(second).hasSameHashCodeAs(second);
+        assertThat(first).isNotEqualTo(third);
+    }
+
+    @Test
+    void hashCodeDoesNotChangeWhenIdAppears()
+    {
+        Listing listing = draft(new BigDecimal("4500000"), "Самара");
+        int before = listing.hashCode();
+        Set<Listing> set = new HashSet<>();
+        set.add(listing);
+
+        withId(listing, 1000L);
+
+        assertThat(listing.hashCode()).isEqualTo(before);
+        // set.contains, а не assertThat(set).contains: AssertJ перебирает элементы через equals и хэш не проверяет
+        assertThat(set.contains(listing)).isTrue();
+    }
+
+    @Test
+    void notEqualToNullOrOtherType()
+    {
+        Listing listing = withId(draft(new BigDecimal("4500000"), "Самара"), 1000L);
+
+        assertThat(listing.equals(null)).isFalse();
+        assertThat(listing.equals(1000L)).isFalse();
+    }
+
+    private Listing withId(Listing listing, Long id)
+    {
+        ReflectionTestUtils.setField(listing, "id", id);
+        return listing;
     }
 
     private Listing draft(BigDecimal price, String city)
