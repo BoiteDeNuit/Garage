@@ -3,6 +3,7 @@ package com.example.controller;
 import com.example.dto.ListingDto;
 import com.example.dto.ListingPriceDto;
 import com.example.dto.ListingRequest;
+import com.example.dto.ListingSearchCriteria;
 import com.example.dto.ListingStats;
 import com.example.dto.ListingUpdateRequest;
 import com.example.security.AppUserPrincipal;
@@ -30,14 +31,15 @@ import java.net.URI;
 public class ListingController {
     private final ListingService listings;
     public ListingController(ListingService listings) { this.listings=listings; }
-    @Operation(summary = "Лента объявлений", description = "Только опубликованные. Фильтр по марке, пагинация, сортировка: publishedAt, createdAt, price, year, mileageKm, horsePower, id")
+    @Operation(summary = "Лента объявлений", description = "Только опубликованные. Фильтры необязательные, границы «от» и «до» включаются. "
+            + "Пагинация, сортировка: publishedAt, createdAt, price, year, mileageKm, horsePower, id")
     @ApiResponse(responseCode = "200", description = "OK")
-    @ApiResponse(responseCode = "400", description = "Нельзя сортировать по этому полю")
+    @ApiResponse(responseCode = "400", description = "Неверный фильтр: «от» больше «до», значение не из списка, нельзя сортировать по этому полю")
     @GetMapping
-    public Page<ListingDto> feed(@RequestParam(required = false) String brand,
+    public Page<ListingDto> feed(@Valid @ParameterObject ListingSearchCriteria criteria,
                                  @ParameterObject @PageableDefault(size = 20) Pageable pageable)
     {
-        return listings.findPublic(brand, ListingSort.forPublicFeed(pageable));
+        return listings.findPublic(criteria, ListingSort.forPublicFeed(pageable));
     }
     @Operation(summary = "Объявление по id", description = "Черновик и архив видят только продавец и админ")
     @ApiResponse(responseCode = "200", description = "OK")

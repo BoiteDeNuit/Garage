@@ -1,5 +1,8 @@
 package com.example.service;
 
+import com.example.dto.ListingSearchCriteria;
+import org.springframework.data.jpa.domain.Specification;
+import org.mockito.ArgumentMatchers;
 import com.example.client.CurrencyClient;
 import com.example.dto.AdminListingDto;
 import com.example.dto.ListingDto;
@@ -444,27 +447,18 @@ class ListingServiceTest {
         verify(repository).findAllWithSeller(pageable);
     }
 
+    // Что именно фильтрует спецификация, проверяют PostgresRepositoryTest и GarageApplicationTests на настоящей базе.
+    // Здесь — что страница уходит в репозиторий как есть и ответ мапится в DTO
     @Test
-    void findPublicReturnsOnlyActive()
+    void findPublicSearchesWithSpecificationAndMaps()
     {
         Pageable pageable = PageRequest.of(0, 20);
-        when(repository.findByStatus(ListingStatus.ACTIVE, pageable)).thenReturn(new PageImpl<>(List.of(listing()), pageable, 1));
+        when(repository.findAll(ArgumentMatchers.<Specification<Listing>>any(), eq(pageable))).thenReturn(new PageImpl<>(List.of(listing()), pageable, 1));
 
-        Page<ListingDto> result = service.findPublic(null, pageable);
+        Page<ListingDto> result = service.findPublic(ListingSearchCriteria.empty(), pageable);
 
         assertThat(result.getContent()).extracting(ListingDto::brand).containsExactly("Toyota");
-        verify(repository, never()).findByStatusAndBrandIgnoreCase(any(), any(), any());
-    }
-
-    @Test
-    void findPublicFiltersByBrand()
-    {
-        Pageable pageable = PageRequest.of(0, 20);
-        when(repository.findByStatusAndBrandIgnoreCase(ListingStatus.ACTIVE, "toyota", pageable)).thenReturn(Page.empty());
-
-        service.findPublic("toyota", pageable);
-
-        verify(repository).findByStatusAndBrandIgnoreCase(ListingStatus.ACTIVE, "toyota", pageable);
+        verify(repository).findAll(ArgumentMatchers.<Specification<Listing>>any(), eq(pageable));
     }
 
     @Test

@@ -19,6 +19,8 @@ import com.example.service.AuthService;
 import com.example.service.ListingService;
 import com.example.support.IntegrationTest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.context.ApplicationEventPublisher;
@@ -36,6 +38,7 @@ import org.springframework.transaction.interceptor.BeanFactoryTransactionAttribu
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -299,6 +302,40 @@ class GarageApplicationTests extends IntegrationTest {
         mockMvc.perform(get("/api/listings").param("page", "30000000").param("size", "100"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Слишком большой номер страницы"));
+    }
+
+    // Каждый фильтр ленты проходит через API на настоящей базе. Черновик подходит под все фильтры, но в ленту не попадает
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            "                                              | Supra,Chaser,Camry",
+            "model=SUPRA                                   | Supra",
+            "yearFrom=1998&yearTo=2001                     | Supra,Chaser",
+            "yearFrom=2001                                 | Chaser,Camry",
+            "priceFrom=2000000                             | Supra,Camry",
+            "priceFrom=1200000&priceTo=2000000             | Chaser,Camry",
+            "mileageTo=154000                              | Supra,Camry",
+            "city=самара                                   | Supra,Camry",
+            "fuelType=DIESEL                               | Chaser",
+            "transmission=CVT                              | Camry",
+            "bodyType=SEDAN&city=Самара                    | Camry",
+            "yearFrom=2016                                 | ''"})
+    void feedFilters(String query, String expectedModels) throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        String brand = uniqueBrand();
+        insertSearchable(seller, brand, "Supra", 1998, 4500000, 154000, "Самара", "PETROL", "MANUAL", "COUPE", ListingStatus.ACTIVE);
+        insertSearchable(seller, brand, "Chaser", 2001, 1200000, 250000, "Тольятти", "DIESEL", "AUTOMATIC", "SEDAN", ListingStatus.ACTIVE);
+        insertSearchable(seller, brand, "Camry", 2015, 2000000, 90000, "Самара", "HYBRID", "CVT", "SEDAN", ListingStatus.ACTIVE);
+        insertSearchable(seller, brand, "Supra", 1998, 4500000, 154000, "Самара", "PETROL", "MANUAL", "COUPE", ListingStatus.DRAFT);
+
+        String url = "/api/listings?brand=" + brand.toLowerCase() + (query == null ? "" : "&" + query) + "&size=50";
+        String body = mockMvc.perform(get(url))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        List<String> models = objectMapper.readTree(body).get("content").valueStream().map(node -> node.get("model").asString()).toList();
+        List<String> expected = expectedModels.isEmpty() ? List.of() : List.of(expectedModels.split(","));
+        assertThat(models).containsExactlyInAnyOrderElementsOf(expected);
     }
 
     // Характеристики проходят через POST, базу и GET как строки enum и стираются PUT без них
@@ -585,6 +622,15 @@ class GarageApplicationTests extends IntegrationTest {
     private ListingPublishedEvent event(Long listingId)
     {
         return new ListingPublishedEvent(listingId, 1L, "Toyota", "Supra", new BigDecimal("4500000.00"), Instant.now());
+    }
+
+    private void insertSearchable(AppUser seller, String brand, String model, int year, int price, int mileage, String city,
+                                  String fuel, String transmission, String body, ListingStatus status)
+    {
+        jdbcTemplate.update("insert into listings (seller_id, status, brand, model, horse_power, year, mileage_km, price, city, " +
+                        "fuel_type, transmission, body_type, published_at) values (?, ?, ?, ?, 200, ?, ?, ?, ?, ?, ?, ?, ?)",
+                seller.getId(), status.name(), brand, model, year, mileage, price, city, fuel, transmission, body,
+                status == ListingStatus.ACTIVE ? Timestamp.from(Instant.now()) : null);
     }
 
     private Long create(AppUser seller, ListingRequest request) throws Exception

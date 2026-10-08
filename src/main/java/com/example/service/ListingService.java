@@ -6,6 +6,7 @@ import com.example.dto.ListingDto;
 import com.example.dto.ListingMapper;
 import com.example.dto.ListingPriceDto;
 import com.example.dto.ListingRequest;
+import com.example.dto.ListingSearchCriteria;
 import com.example.dto.ListingStats;
 import com.example.dto.ListingUpdateRequest;
 import com.example.event.ListingPublishedEvent;
@@ -16,6 +17,7 @@ import com.example.model.ListingAction;
 import com.example.model.ListingStatus;
 import com.example.repository.AppUserRepository;
 import com.example.repository.ListingRepository;
+import com.example.repository.ListingSpecifications;
 import com.example.security.AppUserPrincipal;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -24,6 +26,7 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
@@ -134,13 +137,22 @@ public class ListingService {
         listing.checkDeletable();
         repository.delete(listing);
     }
+    // Статус в фильтре всегда: какие бы параметры ни пришли, в ленту попадают только опубликованные
     @Transactional(readOnly = true)
-    public Page<ListingDto> findPublic(@Nullable String brand, Pageable pageable)
+    public Page<ListingDto> findPublic(ListingSearchCriteria criteria, Pageable pageable)
     {
-        Page<Listing> page = brand == null
-                ? repository.findByStatus(ListingStatus.ACTIVE, pageable)
-                : repository.findByStatusAndBrandIgnoreCase(ListingStatus.ACTIVE, brand, pageable);
-        return page.map(ListingMapper::toDto);
+        Specification<Listing> filter = Specification.allOf(
+                ListingSpecifications.hasStatus(ListingStatus.ACTIVE),
+                ListingSpecifications.brand(criteria.brand()),
+                ListingSpecifications.model(criteria.model()),
+                ListingSpecifications.yearBetween(criteria.yearFrom(), criteria.yearTo()),
+                ListingSpecifications.priceBetween(criteria.priceFrom(), criteria.priceTo()),
+                ListingSpecifications.mileageAtMost(criteria.mileageTo()),
+                ListingSpecifications.city(criteria.city()),
+                ListingSpecifications.fuelType(criteria.fuelType()),
+                ListingSpecifications.transmission(criteria.transmission()),
+                ListingSpecifications.bodyType(criteria.bodyType()));
+        return repository.findAll(filter, pageable).map(ListingMapper::toDto);
     }
     // Свои объявления всех статусов. Продавец — из токена: чужой id сюда не передать
     @Transactional(readOnly = true)

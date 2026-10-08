@@ -864,6 +864,175 @@
           }
         },
         {
+          "name": "Поиск с фильтрами",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));",
+                  "const ids = pm.response.json().content.map(l => l.id);",
+                  "pm.test(\"объявление нашлось по всем фильтрам\", () => pm.expect(ids).to.include(pm.collectionVariables.get(\"listingId\")));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/listings?brand=toyota&model=supra&yearFrom=1990&yearTo=2000&priceTo=5000000&mileageTo=200000&city=самара&fuelType=PETROL&transmission=MANUAL&bodyType=COUPE&size=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listings"
+              ],
+              "query": [
+                {
+                  "key": "brand",
+                  "value": "toyota"
+                },
+                {
+                  "key": "model",
+                  "value": "supra"
+                },
+                {
+                  "key": "yearFrom",
+                  "value": "1990"
+                },
+                {
+                  "key": "yearTo",
+                  "value": "2000"
+                },
+                {
+                  "key": "priceTo",
+                  "value": "5000000"
+                },
+                {
+                  "key": "mileageTo",
+                  "value": "200000"
+                },
+                {
+                  "key": "city",
+                  "value": "самара"
+                },
+                {
+                  "key": "fuelType",
+                  "value": "PETROL"
+                },
+                {
+                  "key": "transmission",
+                  "value": "MANUAL"
+                },
+                {
+                  "key": "bodyType",
+                  "value": "COUPE"
+                },
+                {
+                  "key": "size",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Все фильтры необязательные, границы включаются. Марка, модель и город без учёта регистра"
+          }
+        },
+        {
+          "name": "Поиск мимо — объявления нет",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));",
+                  "const ids = pm.response.json().content.map(l => l.id);",
+                  "pm.test(\"год 1998 не проходит yearFrom=2020\", () => pm.expect(ids).to.not.include(pm.collectionVariables.get(\"listingId\")));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/listings?brand=toyota&yearFrom=2020&size=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listings"
+              ],
+              "query": [
+                {
+                  "key": "brand",
+                  "value": "toyota"
+                },
+                {
+                  "key": "yearFrom",
+                  "value": "2020"
+                },
+                {
+                  "key": "size",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Год «от» больше «до» — 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"понятная причина\", () => pm.expect(pm.response.json().message).to.eql(\"Год «от» больше года «до»\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/listings?yearFrom=2010&yearTo=2000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listings"
+              ],
+              "query": [
+                {
+                  "key": "yearFrom",
+                  "value": "2010"
+                },
+                {
+                  "key": "yearTo",
+                  "value": "2000"
+                }
+              ]
+            }
+          }
+        },
+        {
           "name": "Топливо не из списка — 400",
           "event": [
             {

@@ -24,6 +24,7 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -35,6 +36,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import static com.example.repository.ListingSpecifications.*;
 import static org.assertj.core.api.Assertions.*;
 
 @DataJpaTest(properties = "spring.jpa.properties.hibernate.generate_statistics=true")
@@ -136,9 +138,67 @@ class PostgresRepositoryTest {
         listingRepository.save(active("BMW", "M4", 510, 2024));
         entityManager.flush();
 
-        assertThat(listingRepository.findByStatusAndBrandIgnoreCase(ListingStatus.ACTIVE, "toyota", PageRequest.of(0, 10)).getContent())
+        assertThat(search(hasStatus(ListingStatus.ACTIVE), brand("toyota")))
                 .extracting(Listing::getModel)
                 .containsExactly("Supra");
+    }
+
+    // Регистр меняет Postgres с обеих сторон. В Java "Straße".toUpperCase() = "STRASSE", а upper() базы даёт "STRAßE":
+    // сравнение с Java-версией строку бы не нашло
+    @Test
+    void caseIsFoldedByDatabaseOnBothSides()
+    {
+        listingRepository.save(Listing.draft(seller, new ListingDetails("Lada", "Niva", null, 83, 2020, 50000, null, null, null, null, "Straße", null), Instant.now()));
+        entityManager.flush();
+
+        assertThat(search(city("straße"))).extracting(Listing::getCity).containsExactly("Straße");
+    }
+
+    // Пустая строка и пробелы — не фильтр, а не поиск марки ""
+    @Test
+    void blankTextFilterIsIgnored()
+    {
+        listingRepository.save(active("Toyota", "Supra", 320, 1998));
+        entityManager.flush();
+
+        assertThat(search(hasStatus(ListingStatus.ACTIVE), brand("  "), model(""), city(null))).hasSize(1);
+    }
+
+    // Границы включаются с обеих сторон. Черновик без цены под ценовой фильтр не попадает: null не больше и не меньше
+    @Test
+    void rangesIncludeBoundsAndSkipNulls()
+    {
+        listingRepository.save(priced("Supra", 1998, "4500000", 154000));
+        listingRepository.save(priced("Chaser", 2001, "1200000", 250000));
+        listingRepository.save(priced("Camry", 2015, "2000000", 90000));
+        listingRepository.save(draftWithoutPrice());
+        entityManager.flush();
+
+        assertThat(search(yearBetween(1998, 2001))).extracting(Listing::getModel).containsExactlyInAnyOrder("Supra", "Chaser");
+        assertThat(search(yearBetween(2001, null))).extracting(Listing::getModel).containsExactlyInAnyOrder("Chaser", "Camry", "Niva");
+        assertThat(search(priceBetween(new BigDecimal("1200000"), new BigDecimal("2000000"))))
+                .extracting(Listing::getModel).containsExactlyInAnyOrder("Chaser", "Camry");
+        assertThat(search(priceBetween(null, new BigDecimal("1999999.99")))).extracting(Listing::getModel).containsExactly("Chaser");
+        assertThat(search(mileageAtMost(154000))).extracting(Listing::getModel).containsExactlyInAnyOrder("Supra", "Camry", "Niva");
+    }
+
+    @Test
+    void textAndEnumFiltersMatch()
+    {
+        listingRepository.save(Listing.draft(seller, new ListingDetails("Toyota", "Supra", null, 320, 1998, 154000,
+                FuelType.PETROL, Transmission.MANUAL, BodyType.COUPE, new BigDecimal("4500000"), "Самара", null), Instant.now()));
+        listingRepository.save(Listing.draft(seller, new ListingDetails("Toyota", "Camry", null, 218, 2015, 90000,
+                FuelType.HYBRID, Transmission.CVT, BodyType.SEDAN, new BigDecimal("2000000"), "Самара", null), Instant.now()));
+        listingRepository.save(Listing.draft(seller, new ListingDetails("Toyota", "Chaser", null, 280, 2001, 250000,
+                FuelType.DIESEL, Transmission.AUTOMATIC, BodyType.SEDAN, new BigDecimal("1200000"), "Тольятти", null), Instant.now()));
+        entityManager.flush();
+
+        assertThat(search(city("САМАРА"))).extracting(Listing::getModel).containsExactlyInAnyOrder("Supra", "Camry");
+        assertThat(search(brand(" toyota "))).hasSize(3);
+        assertThat(search(model("supra"))).extracting(Listing::getModel).containsExactly("Supra");
+        assertThat(search(fuelType(FuelType.DIESEL))).extracting(Listing::getModel).containsExactly("Chaser");
+        assertThat(search(transmission(Transmission.CVT))).extracting(Listing::getModel).containsExactly("Camry");
+        assertThat(search(bodyType(BodyType.SEDAN), city("самара"))).extracting(Listing::getModel).containsExactly("Camry");
     }
 
     @Test
@@ -150,7 +210,7 @@ class PostgresRepositoryTest {
         listingRepository.save(draft("Kia", "Rio", 123, 2019));
         entityManager.flush();
 
-        Page<Listing> page = listingRepository.findByStatus(ListingStatus.ACTIVE, PageRequest.of(0, 2, Sort.by("year")));
+        Page<Listing> page = listingRepository.findAll(hasStatus(ListingStatus.ACTIVE), PageRequest.of(0, 2, Sort.by("year")));
 
         assertThat(page.getTotalElements()).isEqualTo(3);
         assertThat(page.getTotalPages()).isEqualTo(2);
@@ -387,6 +447,17 @@ class PostgresRepositoryTest {
     private Listing draft(String brand, String model, int horsePower, int year)
     {
         return Listing.draft(seller, new ListingDetails(brand, model, null, horsePower, year, 50000, null, null, null, new BigDecimal("8500000"), "Самара", null), Instant.now());
+    }
+
+    @SafeVarargs
+    private List<Listing> search(Specification<Listing>... filters)
+    {
+        return listingRepository.findAll(Specification.allOf(filters));
+    }
+
+    private Listing priced(String model, int year, String price, int mileage)
+    {
+        return Listing.draft(seller, new ListingDetails("Toyota", model, null, 200, year, mileage, null, null, null, new BigDecimal(price), "Самара", null), Instant.now());
     }
 
     private Listing withSpecs(FuelType fuel, Transmission transmission, BodyType body)

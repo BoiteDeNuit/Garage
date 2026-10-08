@@ -1,5 +1,9 @@
 package com.example.controller;
 
+import com.example.model.Transmission;
+import com.example.model.FuelType;
+import com.example.model.BodyType;
+import com.example.dto.ListingSearchCriteria;
 import com.example.dto.AdminListingDto;
 import com.example.dto.ListingDto;
 import com.example.dto.ListingRequest;
@@ -233,8 +237,61 @@ class ListingControllerTest {
                 .andExpect(jsonPath("$.page.totalElements").value(1));
 
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        verify(service).findPublic(isNull(), captor.capture());
+        verify(service).findPublic(eq(ListingSearchCriteria.empty()), captor.capture());
         assertThat(captor.getValue().getSort()).isEqualTo(Sort.by(Sort.Order.desc("publishedAt"), Sort.Order.desc("id")));
+    }
+
+    @Test
+    void filtersReachServiceAsCriteria() throws Exception
+    {
+        when(service.findPublic(any(), any(Pageable.class))).thenReturn(Page.empty());
+
+        mockMvc.perform(get("/api/listings")
+                        .param("brand", "toyota").param("model", "supra")
+                        .param("yearFrom", "1990").param("yearTo", "2005")
+                        .param("priceFrom", "1000000").param("priceTo", "5000000")
+                        .param("mileageTo", "200000").param("city", "Самара")
+                        .param("fuelType", "PETROL").param("transmission", "MANUAL").param("bodyType", "COUPE"))
+                .andExpect(status().isOk());
+
+        verify(service).findPublic(eq(new ListingSearchCriteria("toyota", "supra", 1990, 2005,
+                new BigDecimal("1000000"), new BigDecimal("5000000"), 200000, "Самара",
+                FuelType.PETROL, Transmission.MANUAL, BodyType.COUPE)), any(Pageable.class));
+    }
+
+    @Test
+    void reversedRangesAre400() throws Exception
+    {
+        mockMvc.perform(get("/api/listings").param("yearFrom", "2010").param("yearTo", "2000")
+                        .param("priceFrom", "300").param("priceTo", "200"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("Год «от» больше года «до»")))
+                .andExpect(jsonPath("$.message").value(containsString("Цена «от» больше цены «до»")));
+
+        verify(service, never()).findPublic(any(), any());
+    }
+
+    @Test
+    void equalBoundsAreAllowed() throws Exception
+    {
+        when(service.findPublic(any(), any(Pageable.class))).thenReturn(Page.empty());
+
+        mockMvc.perform(get("/api/listings").param("yearFrom", "2000").param("yearTo", "2000"))
+                .andExpect(status().isOk());
+    }
+
+    // Не тот тип в query: свой текст вместо английского от Spring, присланное значение не повторяется
+    @Test
+    void badFilterValuesAre400WithoutEcho() throws Exception
+    {
+        mockMvc.perform(get("/api/listings").param("yearFrom", "abc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Поле yearFrom: неверный формат"));
+        mockMvc.perform(get("/api/listings").param("fuelType", "COAL"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Поле fuelType: допустимые значения PETROL, DIESEL, HYBRID, ELECTRIC, GAS"));
+
+        verify(service, never()).findPublic(any(), any());
     }
 
     @Test

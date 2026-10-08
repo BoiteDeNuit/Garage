@@ -6,14 +6,13 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import java.util.Collection;
 import java.util.Optional;
 
-public interface ListingRepository extends JpaRepository<Listing,Long> {
-    Page<Listing> findByStatus(ListingStatus status, Pageable pageable);
-    Page<Listing> findByStatusAndBrandIgnoreCase(ListingStatus status, String brand, Pageable pageable);
+public interface ListingRepository extends JpaRepository<Listing,Long>, JpaSpecificationExecutor<Listing> {
     Page<Listing> findBySellerId(Long sellerId, Pageable pageable);
     Page<Listing> findBySellerIdAndStatus(Long sellerId, ListingStatus status, Pageable pageable);
     Optional<Listing> findByIdAndStatusIn(Long id, Collection<ListingStatus> statuses);

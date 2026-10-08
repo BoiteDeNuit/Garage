@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.example.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.TypeMismatchException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpHeaders;
@@ -38,7 +39,9 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> notValid(MethodArgumentNotValidException e , HttpServletRequest request)
     {
-        String message = e.getBindingResult().getFieldErrors().stream().map(FieldError::getDefaultMessage).collect(Collectors.joining("; "));
+        String message = e.getBindingResult().getFieldErrors().stream()
+                .map(error -> error.isBindingFailure() ? bindingFailure(error) : error.getDefaultMessage())
+                .collect(Collectors.joining("; "));
         return build(HttpStatus.BAD_REQUEST,message,request);
     }
     @ExceptionHandler(Exception.class)
@@ -78,11 +81,7 @@ public class GlobalExceptionHandler {
         if(e.getCause() instanceof InvalidFormatException invalid
                 && invalid.getTargetType() != null && invalid.getTargetType().isEnum() && !invalid.getPath().isEmpty())
         {
-            String field = invalid.getPath().getLast().getPropertyName();
-            String allowed = Arrays.stream(invalid.getTargetType().getEnumConstants())
-                    .map(Object::toString)
-                    .collect(Collectors.joining(", "));
-            return build(HttpStatus.BAD_REQUEST,"Поле " + field + ": допустимые значения " + allowed,request);
+            return build(HttpStatus.BAD_REQUEST,allowedValues(invalid.getPath().getLast().getPropertyName(),invalid.getTargetType()),request);
         }
         return build(HttpStatus.BAD_REQUEST,"Некорректный формат запроса",request);
     }
@@ -141,6 +140,24 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                 .header(HttpHeaders.RETRY_AFTER,"60")
                 .body(body);
+    }
+    // Query-параметр не превратился в свой тип (?yearFrom=abc, ?fuelType=COAL). Текст Spring по-английски
+    // и с присланным значением, поэтому свой
+    private String bindingFailure(FieldError error)
+    {
+        Class<?> type = error.contains(TypeMismatchException.class) ? error.unwrap(TypeMismatchException.class).getRequiredType() : null;
+        if(type != null && type.isEnum())
+        {
+            return allowedValues(error.getField(),type);
+        }
+        return "Поле " + error.getField() + ": неверный формат";
+    }
+    private String allowedValues(String field,Class<?> enumType)
+    {
+        String allowed = Arrays.stream(enumType.getEnumConstants())
+                .map(Object::toString)
+                .collect(Collectors.joining(", "));
+        return "Поле " + field + ": допустимые значения " + allowed;
     }
     private ResponseEntity<ErrorResponse> build(HttpStatus status,String message,HttpServletRequest request)
     {
