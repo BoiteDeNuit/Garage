@@ -136,8 +136,10 @@ curl -X POST localhost:8080/auth/login \
 - Время в объявлении ставится из `Clock`, поэтому в тестах оно фиксированное.
 - Публикация отправляет событие в топик `listing-published`, его читают группы `notifications`
   и `analytics`. Сервис про Kafka не знает: он публикует событие Spring, в Kafka его отправляет
-  `ListingEventsRelay`. Известный недостаток: событие пока уходит внутри транзакции,
-  при откате в Kafka уже отправлено.
+  `ListingEventsRelay` после коммита (`@TransactionalEventListener(AFTER_COMMIT)`). Откаченная
+  публикация ничего не отправляет. Подтверждение от Kafka не ждём, ошибку отправки считает
+  `listings_events_failed_total`. Это at-most-once: если приложение упадёт между коммитом
+  и отправкой, событие потеряется. Надёжное решение — transactional outbox.
 - Отказ в правах из сервиса отдаёт 403, а не 500: `AccessDeniedException` ловит свой обработчик.
   Если токена нет, 401.
 - Кэш-прокси стоит снаружи транзакционного (`@EnableCaching(order = LOWEST_PRECEDENCE - 1)`),
@@ -169,6 +171,7 @@ curl -X POST localhost:8080/auth/login \
 |---|---|
 | `listings_added_total` | созданные объявления. Не `listings_created`: Prometheus-клиент отрезает суффикс `_created` у счётчиков |
 | `listings_published_total` | публикации |
+| `listings_events_failed_total` | события о публикации, которые не ушли в Kafka |
 | `http_client_requests_seconds{client_name="www.cbr-xml-daily.ru"}` | время запросов к ЦБ |
 | `cache_gets_total{cache="listings"}` | попадания и промахи кэша |
 
@@ -179,7 +182,7 @@ curl -X POST localhost:8080/auth/login \
 ```
 
 Нужен запущенный Docker: часть тестов поднимает контейнеры через Testcontainers.
-217 тестов: unit на Mockito, контроллер через `@WebMvcTest` с настоящей безопасностью, клиент ЦБ
+224 теста: unit на Mockito, контроллер через `@WebMvcTest` с настоящей безопасностью, клиент ЦБ
 на встроенном `HttpServer`, репозитории и миграции на настоящем Postgres, полный контекст
 с Postgres, Kafka и Redis. Контейнеры полного контекста поднимаются один раз на весь прогон.
 CI гоняет их на каждый push в `main` и на каждый PR.

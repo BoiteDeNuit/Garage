@@ -17,6 +17,8 @@ import com.example.service.ListingService;
 import com.example.support.IntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.Ordered;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
@@ -26,9 +28,12 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.aop.Advisor;
 import org.springframework.aop.framework.Advised;
 import org.springframework.cache.interceptor.BeanFactoryCacheOperationSourceAdvisor;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.interceptor.BeanFactoryTransactionAttributeSourceAdvisor;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -43,6 +48,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.after;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -59,6 +65,12 @@ class GarageApplicationTests extends IntegrationTest {
     ListingService listingService;
     @Autowired
     AuthService authService;
+    @Autowired
+    PlatformTransactionManager transactionManager;
+    @Autowired
+    ApplicationEventPublisher applicationEvents;
+    @Autowired
+    MeterRegistry meterRegistry;
 
     @Test
     void sellerCreatesDraftVisibleOnlyToSellerAndAdmin() throws Exception
@@ -441,6 +453,44 @@ class GarageApplicationTests extends IntegrationTest {
         mockMvc.perform(get("/api/listings/" + active)).andExpect(status().isOk());
     }
 
+    // Откаченная публикация не уходит в Kafka и не попадает в счётчик
+    @Test
+    void rolledBackPublicationIsNotSent()
+    {
+        double before = meterRegistry.get("listings.published").counter().count();
+        ListingPublishedEvent event = event(910001L);
+
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            applicationEvents.publishEvent(event);
+            status.setRollbackOnly();
+        });
+
+        verify(notificationsListener, after(3000).never())
+                .onListingPublished(argThat((ListingPublishedEvent received) -> received.listingId().equals(910001L)));
+        assertThat(meterRegistry.get("listings.published").counter().count()).isEqualTo(before);
+    }
+
+    @Test
+    void committedPublicationIsSent()
+    {
+        ListingPublishedEvent event = event(910002L);
+
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> applicationEvents.publishEvent(event));
+
+        verify(notificationsListener, timeout(15000))
+                .onListingPublished(argThat((ListingPublishedEvent received) -> received.listingId().equals(910002L)));
+    }
+
+    // fallbackExecution: без транзакции событие тоже уходит, а не теряется молча
+    @Test
+    void publicationOutsideTransactionIsSent()
+    {
+        applicationEvents.publishEvent(event(910003L));
+
+        verify(notificationsListener, timeout(15000))
+                .onListingPublished(argThat((ListingPublishedEvent received) -> received.listingId().equals(910003L)));
+    }
+
     @Test
     void archiveEvictsCachedCard() throws Exception
     {
@@ -494,7 +544,13 @@ class GarageApplicationTests extends IntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("listings_added_total")))
                 .andExpect(content().string(containsString("listings_published_total")))
+                .andExpect(content().string(containsString("listings_events_failed_total")))
                 .andExpect(content().string(containsString("cache_gets_total{cache=\"listings\"")));
+    }
+
+    private ListingPublishedEvent event(Long listingId)
+    {
+        return new ListingPublishedEvent(listingId, 1L, "Toyota", "Supra", new BigDecimal("4500000.00"), Instant.now());
     }
 
     private Long create(AppUser seller, ListingRequest request) throws Exception
