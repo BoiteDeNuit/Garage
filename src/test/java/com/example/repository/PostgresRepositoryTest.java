@@ -165,6 +165,23 @@ class PostgresRepositoryTest {
     }
 
     @Test
+    void findsListingsOfOneSeller()
+    {
+        AppUser other = userRepository.save(new AppUser("other", "!", Role.USER));
+        listingRepository.save(draft("Toyota", "Supra", 320, 1998));
+        listingRepository.save(active("BMW", "M4", 510, 2024));
+        listingRepository.save(Listing.draft(other, new ListingDetails("Lada", "Niva", null, 83, 2020, 50000, null, null, null), Instant.now()));
+        entityManager.flush();
+
+        assertThat(listingRepository.findBySellerId(seller.getId(), PageRequest.of(0, 10)).getContent())
+                .extracting(Listing::getModel)
+                .containsExactlyInAnyOrder("Supra", "M4");
+        assertThat(listingRepository.findBySellerIdAndStatus(seller.getId(), ListingStatus.ACTIVE, PageRequest.of(0, 10)).getContent())
+                .extracting(Listing::getModel)
+                .containsExactly("M4");
+    }
+
+    @Test
     void averageOfEmptyCatalogIsZero()
     {
         assertThat(listingRepository.averageHorsePower(ListingStatus.ACTIVE)).isZero();

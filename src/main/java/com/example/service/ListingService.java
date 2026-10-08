@@ -142,6 +142,15 @@ public class ListingService {
                 : repository.findByStatusAndBrandIgnoreCase(ListingStatus.ACTIVE, brand, pageable);
         return page.map(ListingMapper::toDto);
     }
+    // Свои объявления всех статусов. Продавец — из токена: чужой id сюда не передать
+    @Transactional(readOnly = true)
+    public Page<ListingDto> findMine(AppUserPrincipal actor, @Nullable ListingStatus status, Pageable pageable)
+    {
+        Page<Listing> page = status == null
+                ? repository.findBySellerId(actor.getId(), pageable)
+                : repository.findBySellerIdAndStatus(actor.getId(), status, pageable);
+        return page.map(ListingMapper::toDto);
+    }
     // Второй уровень защиты админки: URL-правило в SecurityConfig плюс аннотация здесь
     @PreAuthorize("hasRole('ADMIN')")
     @Transactional(readOnly = true)

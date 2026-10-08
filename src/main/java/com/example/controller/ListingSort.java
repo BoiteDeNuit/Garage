@@ -17,6 +17,10 @@ public final class ListingSort {
     {
         return checked(pageable, Sort.by(Sort.Direction.DESC, "publishedAt"));
     }
+    public static Pageable forOwnerList(Pageable pageable)
+    {
+        return checked(pageable, Sort.by(Sort.Direction.DESC, "createdAt"));
+    }
     public static Pageable forAdminList(Pageable pageable)
     {
         return checked(pageable, Sort.by(Sort.Direction.DESC, "createdAt"));

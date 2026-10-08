@@ -14,6 +14,8 @@ import java.util.Optional;
 public interface ListingRepository extends JpaRepository<Listing,Long> {
     Page<Listing> findByStatus(ListingStatus status, Pageable pageable);
     Page<Listing> findByStatusAndBrandIgnoreCase(ListingStatus status, String brand, Pageable pageable);
+    Page<Listing> findBySellerId(Long sellerId, Pageable pageable);
+    Page<Listing> findBySellerIdAndStatus(Long sellerId, ListingStatus status, Pageable pageable);
     Optional<Listing> findByIdAndStatusIn(Long id, Collection<ListingStatus> statuses);
     // Продавец подтягивается тем же запросом через join: без графа на странице из 10 строк было бы 12 SQL
     @EntityGraph(attributePaths = "seller")

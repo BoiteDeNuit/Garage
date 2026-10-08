@@ -54,7 +54,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 // Срез с настоящей безопасностью: SecurityConfig и JwtAuthFilter работают, замоканы только их зависимости
-@WebMvcTest({ListingController.class, AdminListingController.class})
+@WebMvcTest({ListingController.class, AdminListingController.class, MeController.class})
 @Import({SecurityConfig.class, SecurityErrorWriter.class})
 class ListingControllerTest {
     @Autowired
@@ -365,6 +365,40 @@ class ListingControllerTest {
 
         mockMvc.perform(get("/api/admin/listings").param("status", "BLOCKED").with(user(admin)))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void meReturnsPrincipalWithoutPassword() throws Exception
+    {
+        mockMvc.perform(get("/api/me")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/me").with(user(seller)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(7))
+                .andExpect(jsonPath("$.username").value("seller"))
+                .andExpect(jsonPath("$.role").value("USER"))
+                .andExpect(jsonPath("$.passwordHash").doesNotExist());
+    }
+
+    @Test
+    void myListingsAreNewestCreatedFirst() throws Exception
+    {
+        when(service.findMine(any(), any(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(card(1L)), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/me/listings").param("status", "DRAFT").with(user(seller)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(1));
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(service).findMine(argThat(actor -> actor.getId().equals(7L)), eq(ListingStatus.DRAFT), captor.capture());
+        assertThat(captor.getValue().getSort()).isEqualTo(Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
+    }
+
+    @Test
+    void myListingsWithoutTokenIs401() throws Exception
+    {
+        mockMvc.perform(get("/api/me/listings")).andExpect(status().isUnauthorized());
+
+        verify(service, never()).findMine(any(), any(), any());
     }
 
     private ListingUpdateRequest edit(Long version)

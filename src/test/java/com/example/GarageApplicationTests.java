@@ -40,6 +40,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.timeout;
@@ -388,6 +389,32 @@ class GarageApplicationTests extends IntegrationTest {
     {
         assertThatThrownBy(() -> listingService.findAllForAdmin(null, PageRequest.of(0, 10)))
                 .isInstanceOf(AuthorizationDeniedException.class);
+    }
+
+    @Test
+    void myListingsBelongOnlyToMe() throws Exception
+    {
+        AppUser first = createUser(Role.USER);
+        AppUser second = createUser(Role.USER);
+        Long firstDraft = insertListing(first, uniqueBrand(), ListingStatus.DRAFT);
+        Long firstActive = insertListing(first, uniqueBrand(), ListingStatus.ACTIVE);
+        Long secondDraft = insertListing(second, uniqueBrand(), ListingStatus.DRAFT);
+
+        mockMvc.perform(get("/api/me").header("Authorization", bearer(first)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(first.getId()))
+                .andExpect(jsonPath("$.username").value(first.getUsername()));
+        mockMvc.perform(get("/api/me/listings").header("Authorization", bearer(first)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(2))
+                .andExpect(jsonPath("$.content[*].id", containsInAnyOrder(firstDraft.intValue(), firstActive.intValue())));
+        mockMvc.perform(get("/api/me/listings").param("status", "DRAFT").header("Authorization", bearer(first)))
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(firstDraft));
+        mockMvc.perform(get("/api/me/listings").header("Authorization", bearer(second)))
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(secondDraft));
+        mockMvc.perform(get("/api/me/listings")).andExpect(status().isUnauthorized());
     }
 
     @Test

@@ -398,6 +398,29 @@ class ListingServiceTest {
     }
 
     @Test
+    void findMineUsesSellerFromToken()
+    {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(repository.findBySellerId(7L, pageable)).thenReturn(new PageImpl<>(List.of(listing()), pageable, 1));
+
+        Page<ListingDto> result = service.findMine(principal(7L, Role.USER), null, pageable);
+
+        assertThat(result.getContent()).extracting(ListingDto::sellerId).containsExactly(7L);
+        verify(repository, never()).findBySellerIdAndStatus(any(), any(), any());
+    }
+
+    @Test
+    void findMineFiltersByStatus()
+    {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(repository.findBySellerIdAndStatus(7L, ListingStatus.ARCHIVED, pageable)).thenReturn(Page.empty());
+
+        service.findMine(principal(7L, Role.USER), ListingStatus.ARCHIVED, pageable);
+
+        verify(repository).findBySellerIdAndStatus(7L, ListingStatus.ARCHIVED, pageable);
+    }
+
+    @Test
     void adminListCarriesSellerUsername()
     {
         Pageable pageable = PageRequest.of(0, 20);
