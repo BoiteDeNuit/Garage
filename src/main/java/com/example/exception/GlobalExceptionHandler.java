@@ -71,6 +71,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> mismatchArgument(MethodArgumentTypeMismatchException e, HttpServletRequest request)
     {
+        if(e.getRequiredType() == String.class)
+        {
+            return build(HttpStatus.BAD_REQUEST,nulCharacter(e.getName()),request);
+        }
         String message = "Запрос " + request.getRequestURI() + " сформулирован неверно, необходимо: " + e.getName() + ", прислали: " + e.getValue();
         return build(HttpStatus.BAD_REQUEST,message,request);
     }
@@ -82,6 +86,12 @@ public class GlobalExceptionHandler {
                 && invalid.getTargetType() != null && invalid.getTargetType().isEnum() && !invalid.getPath().isEmpty())
         {
             return build(HttpStatus.BAD_REQUEST,allowedValues(invalid.getPath().getLast().getPropertyName(),invalid.getTargetType()),request);
+        }
+        // Строку отвергает только NoNulStringsModule
+        if(e.getCause() instanceof InvalidFormatException invalid
+                && invalid.getTargetType() == String.class && !invalid.getPath().isEmpty())
+        {
+            return build(HttpStatus.BAD_REQUEST,nulCharacter(invalid.getPath().getLast().getPropertyName()),request);
         }
         return build(HttpStatus.BAD_REQUEST,"Некорректный формат запроса",request);
     }
@@ -150,7 +160,16 @@ public class GlobalExceptionHandler {
         {
             return allowedValues(error.getField(),type);
         }
+        // Строка в строку не превращается только у NoNulParametersAdvice
+        if(type == String.class)
+        {
+            return nulCharacter(error.getField());
+        }
         return "Поле " + error.getField() + ": неверный формат";
+    }
+    private String nulCharacter(String field)
+    {
+        return "Поле " + field + ": нулевой символ не допускается";
     }
     private String allowedValues(String field,Class<?> enumType)
     {

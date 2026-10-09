@@ -216,6 +216,9 @@ GET /api/listings?brand=toyota&yearFrom=1990&yearTo=2005&priceTo=5000000&transmi
   публикация ничего не отправляет. Подтверждение от Kafka не ждём, ошибку отправки считает
   `listings_events_failed_total`. Это at-most-once: если приложение упадёт между коммитом
   и отправкой, событие потеряется. Надёжное решение — transactional outbox.
+- Нулевой символ (`\u0000`, `%00`) в любой строке запроса — 400. Postgres не принимает его в тексте,
+  и раньше такая строка доходила до SQL и давала 500. Строки в JSON проверяет `NoNulStringsModule`,
+  query-параметры — `NoNulParametersAdvice`.
 - Отказ в правах из сервиса отдаёт 403, а не 500: `AccessDeniedException` ловит свой обработчик.
   Если токена нет, 401.
 - Кэш-прокси стоит снаружи транзакционного (`@EnableCaching(order = LOWEST_PRECEDENCE - 1)`),
@@ -293,7 +296,7 @@ GET /api/listings?brand=toyota&yearFrom=1990&yearTo=2005&priceTo=5000000&transmi
 ```
 
 Нужен запущенный Docker: часть тестов поднимает контейнеры через Testcontainers.
-317 тестов: unit на Mockito, контроллер через `@WebMvcTest` с настоящей безопасностью, клиент ЦБ
+319 тестов: unit на Mockito, контроллер через `@WebMvcTest` с настоящей безопасностью, клиент ЦБ
 на встроенном `HttpServer`, репозитории и миграции на настоящем Postgres, полный контекст
 с Postgres, Kafka и Redis. Контейнеры полного контекста поднимаются один раз на весь прогон.
 CI гоняет их на каждый push в `main` и на каждый PR.

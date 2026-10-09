@@ -316,6 +316,33 @@ class ListingControllerTest {
         verify(service, never()).findPublic(any(), any());
     }
 
+    // Postgres не принимает \u0000 в тексте: раньше такой запрос доходил до SQL и давал 500
+    @Test
+    void nulInQueryParametersIs400() throws Exception
+    {
+        mockMvc.perform(get("/api/listings").param("brand", "To\u0000yota"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Поле brand: нулевой символ не допускается"));
+        mockMvc.perform(get("/api/listings/feed").param("cursor", "a\u0000b"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Поле cursor: нулевой символ не допускается"));
+
+        verify(service, never()).findPublic(any(), any());
+        verify(service, never()).findFeed(any(), any(), anyInt());
+    }
+
+    @Test
+    void nulInJsonBodyIs400() throws Exception
+    {
+        mockMvc.perform(post("/api/listings").with(user(seller))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(supra()).replace("\"Самара\"", "\"Сам\\u0000ара\"")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Поле city: нулевой символ не допускается"));
+
+        verify(service, never()).create(any(), any());
+    }
+
     @Test
     void reversedRangesAre400() throws Exception
     {
