@@ -35,3 +35,9 @@ select count(l1_0.id) from listings l1_0 where l1_0.status='ACTIVE' and upper(l1
 -- deep_page: Лента, страница 5000 (offset 100000)
 EXPLAIN (ANALYZE, BUFFERS)
 select l1_0.id,l1_0.body_type,l1_0.brand,l1_0.city,l1_0.created_at,l1_0.description,l1_0.engine_code,l1_0.fuel_type,l1_0.horse_power,l1_0.mileage_km,l1_0.model,l1_0.price,l1_0.published_at,l1_0.seller_id,l1_0.status,l1_0.transmission,l1_0.updated_at,l1_0.version,l1_0.year from listings l1_0 where l1_0.status='ACTIVE' order by l1_0.published_at desc,l1_0.id desc offset 100000 rows fetch first 20 rows only;
+
+-- keyset_page: Лента по курсору с той же позиции, что deep_page: после 100 000-й строки.
+-- Позиция курсора берётся заранее (\gset кладёт её в переменные psql), в замер не входит
+select l1_0.published_at as cursor_p, l1_0.id as cursor_id from listings l1_0 where l1_0.status='ACTIVE' order by l1_0.published_at desc,l1_0.id desc offset 99999 rows fetch first 1 rows only \gset
+EXPLAIN (ANALYZE, BUFFERS)
+select l1_0.id,l1_0.body_type,l1_0.brand,l1_0.city,l1_0.created_at,l1_0.description,l1_0.engine_code,l1_0.fuel_type,l1_0.horse_power,l1_0.mileage_km,l1_0.model,l1_0.price,l1_0.published_at,l1_0.seller_id,l1_0.status,l1_0.transmission,l1_0.updated_at,l1_0.version,l1_0.year from listings l1_0 where l1_0.status='ACTIVE' and l1_0.published_at<=:'cursor_p' and (l1_0.published_at<:'cursor_p' or l1_0.id<:cursor_id) order by l1_0.published_at desc,l1_0.id desc fetch first 21 rows only;

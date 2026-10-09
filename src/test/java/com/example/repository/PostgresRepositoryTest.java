@@ -33,6 +33,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
@@ -166,6 +167,28 @@ class PostgresRepositoryTest {
         assertThat(search(hasStatus(ListingStatus.ACTIVE), brand("toyota")))
                 .extracting(Listing::getModel)
                 .containsExactly("Supra");
+    }
+
+    // Курсор (T, b): дальше идут строки с тем же временем и меньшим id, потом более старые.
+    // Более новые, сам курсор и строки с тем же временем и большим id пропускаются
+    @Test
+    void afterCursorRespectsTiesOnPublishedAt()
+    {
+        Instant t = Instant.parse("2026-10-09T10:00:00Z");
+        Long a = publishedAt("A", t);
+        Long b = publishedAt("B", t);
+        Long c = publishedAt("C", t);
+        publishedAt("Older", t.minusSeconds(1));
+        publishedAt("Newer", t.plusSeconds(1));
+        entityManager.flush();
+        entityManager.clear();
+
+        List<Listing> rest = listingRepository.findAll(Specification.allOf(hasStatus(ListingStatus.ACTIVE), after(t, b)),
+                Sort.by(Sort.Order.desc("publishedAt"), Sort.Order.desc("id")));
+
+        assertThat(rest).extracting(Listing::getModel).containsExactly("A", "Older");
+        assertThat(a).isLessThan(b);
+        assertThat(b).isLessThan(c);
     }
 
     // Регистр меняет Postgres с обеих сторон. В Java "Straße".toUpperCase() = "STRASSE", а upper() базы даёт "STRAßE":
@@ -474,6 +497,21 @@ class PostgresRepositoryTest {
         return Listing.draft(seller, new ListingDetails(brand, model, null, horsePower, year, 50000, null, null, null, new BigDecimal("8500000"), "Самара", null), Instant.now());
     }
 
+    // Курсор должен стать точкой старта в индексе, а не фильтром: иначе Postgres читал бы ленту с начала,
+    // как при offset. SQL — из show-sql для /api/listings/feed
+    @Test
+    void cursorQueryStartsInsideFeedIndex()
+    {
+        Instant at = Instant.parse("2026-10-09T10:00:00Z");
+
+        assertThat(explain("select l1_0.id from listings l1_0 where l1_0.status=?1 and l1_0.published_at<=?2 "
+                + "and (l1_0.published_at<?2 or l1_0.id<?3) order by l1_0.published_at desc,l1_0.id desc fetch first 21 rows only",
+                "ACTIVE", Timestamp.from(at), 1000L))
+                .contains("idx_listings_feed")
+                .containsPattern("Index Cond: \\(published_at <=")
+                .doesNotContain("Sort");
+    }
+
     private String explain(String sql, Object... parameters)
     {
         EntityManager em = entityManager.getEntityManager();
@@ -491,6 +529,14 @@ class PostgresRepositoryTest {
     private List<Listing> search(Specification<Listing>... filters)
     {
         return listingRepository.findAll(Specification.allOf(filters));
+    }
+
+    private Long publishedAt(String model, Instant publishedAt)
+    {
+        Listing listing = draft("Toyota", model, 200, 2015);
+        ReflectionTestUtils.setField(listing, "status", ListingStatus.ACTIVE);
+        ReflectionTestUtils.setField(listing, "publishedAt", publishedAt);
+        return listingRepository.save(listing).getId();
     }
 
     private Listing priced(String model, int year, String price, int mileage)

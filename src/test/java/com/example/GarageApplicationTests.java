@@ -21,6 +21,8 @@ import com.example.support.IntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import tools.jackson.databind.JsonNode;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.context.ApplicationEventPublisher;
@@ -42,6 +44,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -338,6 +341,82 @@ class GarageApplicationTests extends IntegrationTest {
         assertThat(models).containsExactlyInAnyOrderElementsOf(expected);
     }
 
+    // Пока листают ленту, сверху появляются новые объявления. Курсор не пускает их в следующие страницы
+    // и ничего не теряет: каждое из 25 исходных ровно один раз и по порядку. Пять опубликованы
+    // в одну микросекунду — между ними порядок держит id
+    @Test
+    void cursorFeedSurvivesInsertsBetweenPages() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        String brand = uniqueBrand();
+        Instant base = Instant.parse("2026-01-01T00:00:00Z");
+        List<Long> expected = new ArrayList<>();
+        for (int i = 0; i < 25; i++)
+        {
+            expected.add(insertPublished(seller, brand, base.minusSeconds(i < 5 ? 0 : i)));
+        }
+        // Первые пять с одним временем идут по id убыванию, остальные уже по времени
+        List<Long> ties = new ArrayList<>(expected.subList(0, 5));
+        ties.sort(Comparator.reverseOrder());
+        List<Long> order = new ArrayList<>(ties);
+        order.addAll(expected.subList(5, 25));
+
+        List<Long> seen = new ArrayList<>();
+        String cursor = null;
+        int pages = 0;
+        do
+        {
+            JsonNode page = feed(brand, cursor, 10);
+            page.get("items").valueStream().forEach(item -> seen.add(item.get("id").asLong()));
+            cursor = page.get("nextCursor").isNull() ? null : page.get("nextCursor").asString();
+            insertPublished(seller, brand, Instant.now());
+            pages++;
+        }
+        while (cursor != null);
+
+        assertThat(seen).containsExactlyElementsOf(order);
+        assertThat(pages).isEqualTo(3);
+    }
+
+    // Ровно 20 строк по 10: вторая страница последняя. Лишняя строка в запросе (size + 1) нужна,
+    // чтобы не отдавать курсор на пустую третью страницу
+    @Test
+    void cursorFeedEndsExactlyOnLastFullPage() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        String brand = uniqueBrand();
+        for (int i = 0; i < 20; i++)
+        {
+            insertPublished(seller, brand, Instant.parse("2026-01-01T00:00:00Z").minusSeconds(i));
+        }
+
+        JsonNode first = feed(brand, null, 10);
+        JsonNode second = feed(brand, first.get("nextCursor").asString(), 10);
+
+        assertThat(first.get("items")).hasSize(10);
+        assertThat(second.get("items")).hasSize(10);
+        assertThat(second.get("nextCursor").isNull()).isTrue();
+    }
+
+    // Для сравнения — лента по номеру страницы при той же вставке: последнее объявление первой
+    // страницы съезжает на вторую и приходит ещё раз. Поэтому для бесконечной ленты курсор
+    @Test
+    void offsetFeedRepeatsRowWhenNewListingArrives() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        String brand = uniqueBrand();
+        for (int i = 0; i < 15; i++)
+        {
+            insertPublished(seller, brand, Instant.parse("2026-01-01T00:00:00Z").minusSeconds(i));
+        }
+
+        List<Long> first = offsetPage(brand, 0);
+        insertPublished(seller, brand, Instant.now());
+        List<Long> second = offsetPage(brand, 1);
+
+        assertThat(second.getFirst()).isEqualTo(first.getLast());
+    }
+
     // Характеристики проходят через POST, базу и GET как строки enum и стираются PUT без них
     @Test
     void specsGoThroughApi() throws Exception
@@ -622,6 +701,31 @@ class GarageApplicationTests extends IntegrationTest {
     private ListingPublishedEvent event(Long listingId)
     {
         return new ListingPublishedEvent(listingId, 1L, "Toyota", "Supra", new BigDecimal("4500000.00"), Instant.now());
+    }
+
+    private Long insertPublished(AppUser seller, String brand, Instant publishedAt)
+    {
+        return jdbcTemplate.queryForObject("insert into listings (seller_id, status, brand, model, horse_power, year, mileage_km, price, city, published_at) " +
+                        "values (?, 'ACTIVE', ?, 'Supra', 320, 1998, 150000, 4500000, 'Самара', ?) returning id",
+                Long.class, seller.getId(), brand, Timestamp.from(publishedAt));
+    }
+
+    private JsonNode feed(String brand, String cursor, int size) throws Exception
+    {
+        MockHttpServletRequestBuilder request = get("/api/listings/feed").param("brand", brand.toLowerCase()).param("size", String.valueOf(size));
+        if (cursor != null)
+        {
+            request.param("cursor", cursor);
+        }
+        return objectMapper.readTree(mockMvc.perform(request).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    }
+
+    private List<Long> offsetPage(String brand, int page) throws Exception
+    {
+        String body = mockMvc.perform(get("/api/listings").param("brand", brand.toLowerCase()).param("size", "10").param("page", String.valueOf(page)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(body).get("content").valueStream().map(item -> item.get("id").asLong()).toList();
     }
 
     private void insertSearchable(AppUser seller, String brand, String model, int year, int price, int mileage, String city,

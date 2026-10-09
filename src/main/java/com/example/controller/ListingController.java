@@ -1,11 +1,14 @@
 package com.example.controller;
 
+import com.example.dto.FeedCursor;
+import com.example.dto.FeedPage;
 import com.example.dto.ListingDto;
 import com.example.dto.ListingPriceDto;
 import com.example.dto.ListingRequest;
 import com.example.dto.ListingSearchCriteria;
 import com.example.dto.ListingStats;
 import com.example.dto.ListingUpdateRequest;
+import com.example.exception.InvalidRequestException;
 import com.example.security.AppUserPrincipal;
 import com.example.service.ListingService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -40,6 +43,22 @@ public class ListingController {
                                  @ParameterObject @PageableDefault(size = 20) Pageable pageable)
     {
         return listings.findPublic(criteria, ListingSort.forPublicFeed(pageable));
+    }
+    @Operation(summary = "Лента по курсору", description = "Только опубликованные, сначала новые, те же фильтры, что у ленты. "
+            + "Без total и номера страницы: следующую берут по nextCursor из ответа. Новые объявления не сдвигают уже отданные страницы")
+    @ApiResponse(responseCode = "200", description = "OK")
+    @ApiResponse(responseCode = "400", description = "Неверный курсор, размер страницы не от 1 до 100 или неверный фильтр")
+    @GetMapping("/feed")
+    public FeedPage feedByCursor(@Valid @ParameterObject ListingSearchCriteria criteria,
+                                 @Parameter(description = "nextCursor из прошлого ответа, для первой страницы не нужен") @RequestParam(required = false) String cursor,
+                                 @Parameter(description = "Сколько объявлений, от 1 до 100") @RequestParam(defaultValue = "20") int size)
+    {
+        if(size < 1 || size > 100)
+        {
+            throw new InvalidRequestException("Размер страницы от 1 до 100");
+        }
+        FeedCursor after = cursor == null ? null : FeedCursor.decode(cursor);
+        return listings.findFeed(criteria, after, size);
     }
     @Operation(summary = "Объявление по id", description = "Черновик и архив видят только продавец и админ")
     @ApiResponse(responseCode = "200", description = "OK")

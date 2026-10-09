@@ -2,6 +2,8 @@ package com.example.service;
 
 import com.example.client.CurrencyClient;
 import com.example.dto.AdminListingDto;
+import com.example.dto.FeedCursor;
+import com.example.dto.FeedPage;
 import com.example.dto.ListingDto;
 import com.example.dto.ListingMapper;
 import com.example.dto.ListingPriceDto;
@@ -26,6 +28,7 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -36,9 +39,11 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 
 @Service
 public class ListingService {
+    private static final Sort FEED_ORDER = Sort.by(Sort.Order.desc("publishedAt"), Sort.Order.desc("id"));
     private final ListingRepository repository;
     private final AppUserRepository users;
     private final ListingReader reader;
@@ -141,7 +146,27 @@ public class ListingService {
     @Transactional(readOnly = true)
     public Page<ListingDto> findPublic(ListingSearchCriteria criteria, Pageable pageable)
     {
-        Specification<Listing> filter = Specification.allOf(
+        return repository.findAll(publicFilter(criteria), pageable).map(ListingMapper::toDto);
+    }
+    // Лента по курсору: без count и без offset. Берём на одну строку больше, чтобы узнать, есть ли продолжение.
+    // Порядок фиксированный — по нему построен курсор и индекс idx_listings_feed
+    @Transactional(readOnly = true)
+    public FeedPage findFeed(ListingSearchCriteria criteria, @Nullable FeedCursor after, int size)
+    {
+        Specification<Listing> filter = publicFilter(criteria);
+        if(after != null)
+        {
+            filter = filter.and(ListingSpecifications.after(after.publishedAt(), after.id()));
+        }
+        List<Listing> rows = repository.findBy(filter, query -> query.sortBy(FEED_ORDER).limit(size + 1).all());
+        boolean hasNext = rows.size() > size;
+        List<Listing> page = hasNext ? rows.subList(0, size) : rows;
+        String nextCursor = hasNext ? FeedCursor.after(page.getLast()).encode() : null;
+        return new FeedPage(page.stream().map(ListingMapper::toDto).toList(), nextCursor);
+    }
+    private Specification<Listing> publicFilter(ListingSearchCriteria criteria)
+    {
+        return Specification.allOf(
                 ListingSpecifications.hasStatus(ListingStatus.ACTIVE),
                 ListingSpecifications.brand(criteria.brand()),
                 ListingSpecifications.model(criteria.model()),
@@ -152,7 +177,6 @@ public class ListingService {
                 ListingSpecifications.fuelType(criteria.fuelType()),
                 ListingSpecifications.transmission(criteria.transmission()),
                 ListingSpecifications.bodyType(criteria.bodyType()));
-        return repository.findAll(filter, pageable).map(ListingMapper::toDto);
     }
     // Свои объявления всех статусов. Продавец — из токена: чужой id сюда не передать
     @Transactional(readOnly = true)

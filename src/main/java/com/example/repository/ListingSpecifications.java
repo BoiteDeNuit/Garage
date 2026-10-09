@@ -11,6 +11,7 @@ import org.hibernate.query.criteria.HibernateCriteriaBuilder;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 
 // Куски фильтра ленты. Пустое значение не фильтрует: unrestricted() в allOf ничего не добавляет к where
 public final class ListingSpecifications {
@@ -43,6 +44,16 @@ public final class ListingSpecifications {
     public static Specification<Listing> mileageAtMost(Integer max)
     {
         return between(Listing_.mileageKm, null, max);
+    }
+    // Строки строго после курсора в порядке (published_at desc, id desc).
+    // Не (a < p) or (a = p and b < id) одним OR: такое условие индекс по published_at не ограничивает,
+    // и Postgres читал бы ленту с начала. Отдельное published_at <= p даёт индексу точку старта
+    public static Specification<Listing> after(Instant publishedAt, Long id)
+    {
+        return (root, query, cb) -> cb.and(
+                cb.lessThanOrEqualTo(root.get(Listing_.publishedAt), publishedAt),
+                cb.or(cb.lessThan(root.get(Listing_.publishedAt), publishedAt),
+                        cb.lessThan(root.get(Listing_.id), id)));
     }
     public static Specification<Listing> fuelType(FuelType fuelType)
     {

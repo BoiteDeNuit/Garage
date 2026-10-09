@@ -3,6 +3,8 @@ package com.example.controller;
 import com.example.model.Transmission;
 import com.example.model.FuelType;
 import com.example.model.BodyType;
+import com.example.dto.FeedPage;
+import com.example.dto.FeedCursor;
 import com.example.dto.ListingSearchCriteria;
 import com.example.dto.AdminListingDto;
 import com.example.dto.ListingDto;
@@ -46,6 +48,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -292,6 +295,53 @@ class ListingControllerTest {
                 .andExpect(jsonPath("$.message").value("Поле fuelType: допустимые значения PETROL, DIESEL, HYBRID, ELECTRIC, GAS"));
 
         verify(service, never()).findPublic(any(), any());
+    }
+
+    @Test
+    void feedPassesDecodedCursorAndSize() throws Exception
+    {
+        FeedCursor cursor = new FeedCursor(Instant.parse("2026-10-09T10:00:00.000001Z"), 42L);
+        when(service.findFeed(any(), any(), anyInt())).thenReturn(new FeedPage(List.of(card(1L)), "next"));
+
+        mockMvc.perform(get("/api/listings/feed").param("cursor", cursor.encode()).param("size", "5").param("brand", "toyota"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].id").value(1))
+                .andExpect(jsonPath("$.nextCursor").value("next"));
+
+        verify(service).findFeed(argThat(criteria -> "toyota".equals(criteria.brand())), eq(cursor), eq(5));
+    }
+
+    @Test
+    void firstFeedPageHasNoCursorAndDefaultSize() throws Exception
+    {
+        when(service.findFeed(any(), any(), anyInt())).thenReturn(new FeedPage(List.of(), null));
+
+        mockMvc.perform(get("/api/listings/feed"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nextCursor").isEmpty());
+
+        verify(service).findFeed(any(), isNull(), eq(20));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0", "101", "-1"})
+    void feedSizeOutOfRangeIs400(String size) throws Exception
+    {
+        mockMvc.perform(get("/api/listings/feed").param("size", size))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Размер страницы от 1 до 100"));
+
+        verify(service, never()).findFeed(any(), any(), anyInt());
+    }
+
+    @Test
+    void brokenCursorIs400() throws Exception
+    {
+        mockMvc.perform(get("/api/listings/feed").param("cursor", "not-a-cursor"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Неверный курсор"));
+
+        verify(service, never()).findFeed(any(), any(), anyInt());
     }
 
     @Test

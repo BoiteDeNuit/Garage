@@ -64,6 +64,14 @@
     {
       "key": "archiveId",
       "value": ""
+    },
+    {
+      "key": "feedCursor",
+      "value": ""
+    },
+    {
+      "key": "feedFirstId",
+      "value": ""
     }
   ],
   "item": [
@@ -1082,6 +1090,152 @@
                   "language": "json"
                 }
               }
+            }
+          }
+        },
+        {
+          "name": "Лента по курсору, первая страница",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));",
+                  "const page = pm.response.json();",
+                  "pm.test(\"одно объявление\", () => pm.expect(page.items).to.have.lengthOf(1));",
+                  "pm.test(\"есть курсор или лента кончилась\", () => pm.expect(page).to.have.property(\"nextCursor\"));",
+                  "pm.collectionVariables.set(\"feedCursor\", page.nextCursor || \"\");",
+                  "pm.collectionVariables.set(\"feedFirstId\", page.items[0].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/listings/feed?brand=toyota&size=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listings",
+                "feed"
+              ],
+              "query": [
+                {
+                  "key": "brand",
+                  "value": "toyota"
+                },
+                {
+                  "key": "size",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Лента по курсору, вторая страница",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get(\"feedCursor\")) {",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));",
+                  "const page = pm.response.json();",
+                  "pm.test(\"не повторяет первую страницу\", () => pm.expect(page.items.map(l => l.id)).to.not.include(pm.collectionVariables.get(\"feedFirstId\")));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/listings/feed?brand=toyota&size=1&cursor={{feedCursor}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listings",
+                "feed"
+              ],
+              "query": [
+                {
+                  "key": "brand",
+                  "value": "toyota"
+                },
+                {
+                  "key": "size",
+                  "value": "1"
+                },
+                {
+                  "key": "cursor",
+                  "value": "{{feedCursor}}"
+                }
+              ]
+            },
+            "description": "Если первая страница была последней, курсора нет и запрос пропускается: пустой cursor сервер не принимает"
+          }
+        },
+        {
+          "name": "Неверный курсор — 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"причина\", () => pm.expect(pm.response.json().message).to.eql(\"Неверный курсор\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/listings/feed?cursor=broken",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listings",
+                "feed"
+              ],
+              "query": [
+                {
+                  "key": "cursor",
+                  "value": "broken"
+                }
+              ]
             }
           }
         },
