@@ -56,7 +56,8 @@ public final class ListingSpecifications {
     {
         return equalTo(Listing_.bodyType, bodyType);
     }
-    // upper(колонка) = upper(?), как в ...IgnoreCase у Spring Data. Под левую часть стоит индекс idx_listings_brand_upper.
+    // upper(колонка) = upper(?), как в ...IgnoreCase у Spring Data. Для марки под левую часть стоит частичный индекс
+    // idx_listings_brand_feed (только ACTIVE, V10), модель и город без индекса.
     // Регистр меняет Postgres с обеих сторон: toUpperCase в Java расходится с upper() базы
     // ("Straße" -> "STRASSE" против "STRAßE", а при локали C Postgres кириллицу не трогает).
     // value() — параметр запроса, literal() вписал бы строку прямо в текст SQL

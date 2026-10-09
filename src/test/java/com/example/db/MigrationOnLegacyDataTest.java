@@ -14,6 +14,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -88,9 +89,12 @@ class MigrationOnLegacyDataTest {
 
     private FluentConfiguration flyway(String url)
     {
+        // То же, что spring.flyway.postgresql.transactional-lock: false в application.yml.
+        // Без этого CREATE INDEX CONCURRENTLY из V10 ждёт транзакцию блокировки самого Flyway и висит
         return Flyway.configure()
                 .dataSource(url, postgres.getUsername(), postgres.getPassword())
-                .locations("classpath:db/migration");
+                .locations("classpath:db/migration")
+                .configuration(Map.of("flyway.postgresql.transactional.lock", "false"));
     }
 
     private String createDatabase(String name) throws SQLException

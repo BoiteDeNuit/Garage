@@ -37,6 +37,10 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+    # Блокировка Flyway в транзакции: CREATE INDEX CONCURRENTLY из V10 ждал бы конца этой транзакции и висел.
+    # Без неё Flyway берёт сессионную advisory-блокировку
+    postgresql:
+      transactional-lock: false
   jpa:
     open-in-view: false
     hibernate:

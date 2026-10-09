@@ -8,7 +8,9 @@ import com.example.model.ListingDetails;
 import com.example.model.ListingStatus;
 import com.example.model.Role;
 import com.example.model.Transmission;
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceException;
+import jakarta.persistence.Query;
 import org.hibernate.Hibernate;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
@@ -35,6 +37,7 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.example.repository.ListingSpecifications.*;
 import static org.assertj.core.api.Assertions.*;
@@ -93,13 +96,35 @@ class PostgresRepositoryTest {
     }
 
     @Test
-    void brandIndexUsesUpperLikeHibernate()
+    void feedIndexesReplaceOldBrandIndex()
     {
         List<String> indexes = entityManager.getEntityManager()
                 .createNativeQuery("select indexname from pg_indexes where tablename = 'listings'")
                 .getResultList().stream().map(Object::toString).toList();
 
-        assertThat(indexes).contains("idx_listings_brand_upper", "idx_listings_seller");
+        assertThat(indexes).contains("idx_listings_feed", "idx_listings_brand_feed", "idx_listings_seller");
+        assertThat(indexes).doesNotContain("idx_listings_brand_upper");
+    }
+
+    // Частичный индекс подходит, только если условие запроса совпадает с его WHERE, а выражение — с колонкой индекса.
+    // SQL взят из show-sql, статус уходит параметром, как у Hibernate. На пустой таблице планировщику дешевле
+    // прочитать её целиком, поэтому seq scan выключен: проверяется, что индекс подходит к форме запроса
+    @Test
+    void feedQueryCanUseFeedIndex()
+    {
+        assertThat(explain("select l1_0.id from listings l1_0 where l1_0.status=?1 "
+                + "order by l1_0.published_at desc,l1_0.id desc offset 0 rows fetch first 20 rows only", "ACTIVE"))
+                .contains("idx_listings_feed")
+                .doesNotContain("Sort");
+    }
+
+    @Test
+    void brandQueryCanUseBrandFeedIndex()
+    {
+        assertThat(explain("select l1_0.id from listings l1_0 where l1_0.status=?1 and upper(l1_0.brand)=upper(?2) "
+                + "order by l1_0.published_at desc,l1_0.id desc offset 0 rows fetch first 20 rows only", "ACTIVE", "toyota"))
+                .contains("idx_listings_brand_feed")
+                .doesNotContain("Sort");
     }
 
     @Test
@@ -447,6 +472,19 @@ class PostgresRepositoryTest {
     private Listing draft(String brand, String model, int horsePower, int year)
     {
         return Listing.draft(seller, new ListingDetails(brand, model, null, horsePower, year, 50000, null, null, null, new BigDecimal("8500000"), "Самара", null), Instant.now());
+    }
+
+    private String explain(String sql, Object... parameters)
+    {
+        EntityManager em = entityManager.getEntityManager();
+        em.createNativeQuery("set local enable_seqscan = off").executeUpdate();
+        Query query = em.createNativeQuery("explain " + sql);
+        for (int i = 0; i < parameters.length; i++)
+        {
+            query.setParameter(i + 1, parameters[i]);
+        }
+        List<?> plan = query.getResultList();
+        return plan.stream().map(Object::toString).collect(Collectors.joining("\n"));
     }
 
     @SafeVarargs
