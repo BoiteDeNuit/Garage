@@ -421,7 +421,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"fuelType\": \"PETROL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": null,\n  \"city\": null,\n  \"description\": \"Один владелец\"\n}",
+              "raw": "{\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"fuelType\": \"PETROL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": null,\n  \"city\": null,\n  \"description\": \"Небольшой пробег, один владелец\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -631,7 +631,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"version\": {{listingVersion}},\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"fuelType\": \"PETROL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Один владелец\"\n}",
+              "raw": "{\n  \"version\": {{listingVersion}},\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"fuelType\": \"PETROL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Небольшой пробег, один владелец\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -685,7 +685,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"version\": {{staleVersion}},\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 160000,\n  \"fuelType\": \"PETROL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Один владелец\"\n}",
+              "raw": "{\n  \"version\": {{staleVersion}},\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 160000,\n  \"fuelType\": \"PETROL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Небольшой пробег, один владелец\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -952,6 +952,54 @@
           }
         },
         {
+          "name": "Поиск по словам",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));",
+                  "const ids = pm.response.json().content.map(l => l.id);",
+                  "pm.test(\"«небольшим пробегом» находит «Небольшой пробег»\", () => pm.expect(ids).to.include(pm.collectionVariables.get(\"listingId\")));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/listings?q=небольшим пробегом&brand=toyota&size=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listings"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "небольшим пробегом"
+                },
+                {
+                  "key": "brand",
+                  "value": "toyota"
+                },
+                {
+                  "key": "size",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Марка, модель и описание с учётом словоформ. Без sort сначала самые подходящие"
+          }
+        },
+        {
           "name": "Поиск мимо — объявления нет",
           "event": [
             {
@@ -1084,7 +1132,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"fuelType\": \"COAL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Один владелец\"\n}",
+              "raw": "{\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"fuelType\": \"COAL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Небольшой пробег, один владелец\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1522,7 +1570,7 @@
             "description": "Версия актуальная, отказ именно из-за статуса",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"version\": {{listingVersion}},\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"fuelType\": \"PETROL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Один владелец\"\n}",
+              "raw": "{\n  \"version\": {{listingVersion}},\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"fuelType\": \"PETROL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Небольшой пробег, один владелец\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1662,7 +1710,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"fuelType\": \"PETROL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Один владелец\"\n}",
+              "raw": "{\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"fuelType\": \"PETROL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Небольшой пробег, один владелец\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1845,7 +1893,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"fuelType\": \"PETROL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Один владелец\"\n}",
+              "raw": "{\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"fuelType\": \"PETROL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Небольшой пробег, один владелец\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

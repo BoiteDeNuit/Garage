@@ -65,15 +65,16 @@ class ListingSearchCriteriaTest {
     static Stream<Arguments> outOfBounds()
     {
         return Stream.of(
-                Arguments.of(new ListingSearchCriteria("a".repeat(51), null, null, null, null, null, null, null, null, null, null), "Марка не длиннее 50 символов"),
-                Arguments.of(new ListingSearchCriteria(null, "a".repeat(101), null, null, null, null, null, null, null, null, null), "Модель не длиннее 100 символов"),
-                Arguments.of(new ListingSearchCriteria(null, null, null, null, null, null, null, "a".repeat(101), null, null, null), "Город не длиннее 100 символов"),
-                Arguments.of(new ListingSearchCriteria(null, null, 1800, null, null, null, null, null, null, null, null), "Год «от» не раньше 1885"),
-                Arguments.of(new ListingSearchCriteria(null, null, null, 2200, null, null, null, null, null, null, null), "Год «до» не позже 2100"),
-                Arguments.of(new ListingSearchCriteria(null, null, null, null, null, new BigDecimal("-1"), null, null, null, null, null), "Цена «до» не может быть отрицательной"),
-                Arguments.of(new ListingSearchCriteria(null, null, null, null, null, null, -1, null, null, null, null), "Пробег не может быть отрицательным"),
-                Arguments.of(new ListingSearchCriteria(null, null, null, null, new BigDecimal("1E-20000"), null, null, null, null, null, null), "Цена «от»: не больше 10 знаков до запятой и 2 после"),
-                Arguments.of(new ListingSearchCriteria(null, null, null, null, null, new BigDecimal("1E+200000"), null, null, null, null, null), "Цена «до»: не больше 10 знаков до запятой и 2 после"));
+                Arguments.of(new ListingSearchCriteria("a".repeat(201), null, null, null, null, null, null, null, null, null, null, null), "Поисковый запрос не длиннее 200 символов"),
+                Arguments.of(new ListingSearchCriteria(null, "a".repeat(51), null, null, null, null, null, null, null, null, null, null), "Марка не длиннее 50 символов"),
+                Arguments.of(new ListingSearchCriteria(null, null, "a".repeat(101), null, null, null, null, null, null, null, null, null), "Модель не длиннее 100 символов"),
+                Arguments.of(new ListingSearchCriteria(null, null, null, null, null, null, null, null, "a".repeat(101), null, null, null), "Город не длиннее 100 символов"),
+                Arguments.of(new ListingSearchCriteria(null, null, null, 1800, null, null, null, null, null, null, null, null), "Год «от» не раньше 1885"),
+                Arguments.of(new ListingSearchCriteria(null, null, null, null, 2200, null, null, null, null, null, null, null), "Год «до» не позже 2100"),
+                Arguments.of(new ListingSearchCriteria(null, null, null, null, null, null, new BigDecimal("-1"), null, null, null, null, null), "Цена «до» не может быть отрицательной"),
+                Arguments.of(new ListingSearchCriteria(null, null, null, null, null, null, null, -1, null, null, null, null), "Пробег не может быть отрицательным"),
+                Arguments.of(new ListingSearchCriteria(null, null, null, null, null, new BigDecimal("1E-20000"), null, null, null, null, null, null), "Цена «от»: не больше 10 знаков до запятой и 2 после"),
+                Arguments.of(new ListingSearchCriteria(null, null, null, null, null, null, new BigDecimal("1E+200000"), null, null, null, null, null), "Цена «до»: не больше 10 знаков до запятой и 2 после"));
     }
 
     private Set<String> messages(ListingSearchCriteria criteria)
@@ -83,6 +84,6 @@ class ListingSearchCriteriaTest {
 
     private ListingSearchCriteria criteria(Integer yearFrom, Integer yearTo, BigDecimal priceFrom, BigDecimal priceTo)
     {
-        return new ListingSearchCriteria(null, null, yearFrom, yearTo, priceFrom, priceTo, null, null, null, null, null);
+        return new ListingSearchCriteria(null, null, null, yearFrom, yearTo, priceFrom, priceTo, null, null, null, null, null);
     }
 }

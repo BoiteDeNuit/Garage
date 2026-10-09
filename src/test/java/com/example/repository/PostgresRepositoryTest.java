@@ -512,6 +512,92 @@ class PostgresRepositoryTest {
                 .doesNotContain("Sort");
     }
 
+    // Слова сравниваются по основе: «небольшим пробегом» и «небольшой пробег» дают одни лексемы
+    @Test
+    void textSearchMatchesWordForms()
+    {
+        listingRepository.save(described("Camry", "Продаю с небольшим пробегом, один владелец"));
+        listingRepository.save(described("Corolla", "Пробег большой, но мотор живой"));
+        entityManager.flush();
+
+        assertThat(search(matches("небольшой пробег"))).extracting(Listing::getModel).containsExactly("Camry");
+        assertThat(search(matches("пробеги"))).extracting(Listing::getModel).containsExactlyInAnyOrder("Camry", "Corolla");
+    }
+
+    // Марка и модель с весом A, описание с B: совпадение в модели выше совпадения в описании.
+    // При равном ранге — новые первыми
+    @Test
+    void modelMatchRanksAboveDescriptionMatch()
+    {
+        Long inDescription = publishedAt("Rio", Instant.parse("2026-10-09T12:00:00Z"));
+        Long inModelOld = publishedAt("Camry", Instant.parse("2026-10-01T12:00:00Z"));
+        Long inModelNew = publishedAt("Camry", Instant.parse("2026-10-05T12:00:00Z"));
+        entityManager.getEntityManager().createNativeQuery("update listings set description = 'Не хуже, чем Camry' where id = ?1")
+                .setParameter(1, inDescription).executeUpdate();
+
+        Page<Listing> page = listingRepository.findAll(Specification.allOf(matches("camry"), mostRelevantFirst("camry")), PageRequest.of(0, 10));
+
+        assertThat(page.getContent()).extracting(Listing::getId).containsExactly(inModelNew, inModelOld, inDescription);
+    }
+
+    // Spring Data убирает order by из count-запроса. Иначе ранг в order by сломал бы count(*)
+    @Test
+    void relevanceOrderKeepsCountWorking()
+    {
+        listingRepository.save(described("Camry", "camry"));
+        listingRepository.save(described("Supra", "camry в подарок"));
+        listingRepository.save(described("Supra", "без совпадений"));
+        entityManager.flush();
+
+        Page<Listing> page = listingRepository.findAll(Specification.allOf(matches("camry"), mostRelevantFirst("camry")), PageRequest.of(0, 1));
+
+        assertThat(page.getTotalElements()).isEqualTo(2);
+        assertThat(page.getContent()).extracting(Listing::getModel).containsExactly("Camry");
+    }
+
+    // Синтаксис websearch_to_tsquery: кавычки — слова подряд, or, минус — исключить.
+    // Мусор вроде незакрытых скобок не роняет запрос, в отличие от to_tsquery
+    @Test
+    void webSearchSyntaxWorks()
+    {
+        listingRepository.save(described("Camry", "Зимняя резина в подарок"));
+        listingRepository.save(described("Corolla", "Резина зимняя, после ДТП"));
+        listingRepository.save(described("Supra", "Летняя резина"));
+        entityManager.flush();
+
+        assertThat(search(matches("\"зимняя резина\""))).extracting(Listing::getModel).containsExactly("Camry");
+        assertThat(search(matches("резина -дтп"))).extracting(Listing::getModel).containsExactlyInAnyOrder("Camry", "Supra");
+        assertThat(search(matches("подарок or дтп"))).extracting(Listing::getModel).containsExactlyInAnyOrder("Camry", "Corolla");
+        assertThat(search(matches("((( летняя !!!"))).extracting(Listing::getModel).containsExactly("Supra");
+    }
+
+    // Из «и на» после стоп-слов ничего не остаётся. Пустой tsquery ни с чем не совпадает, поиск пустой.
+    // Пустая строка — не поиск вовсе
+    @Test
+    void stopWordsFindNothingButBlankQueryIsNoFilter()
+    {
+        listingRepository.save(described("Camry", "Машина на ходу и на учёте"));
+        entityManager.flush();
+
+        assertThat(search(matches("и на"))).isEmpty();
+        assertThat(search(matches("  "))).hasSize(1);
+    }
+
+    // Вектор STORED: Postgres пересчитывает его при UPDATE описания, Hibernate об этой колонке не знает
+    @Test
+    void searchVectorFollowsDescriptionUpdate()
+    {
+        Listing listing = listingRepository.save(described("Camry", "Без вложений"));
+        entityManager.flush();
+
+        listing.updateDetails(new ListingDetails("Toyota", "Camry", null, 200, 2015, 50000, null, null, null,
+                new BigDecimal("8500000"), "Самара", "Свежий ремень ГРМ"), Instant.now());
+        entityManager.flush();
+
+        assertThat(search(matches("ремень"))).extracting(Listing::getModel).containsExactly("Camry");
+        assertThat(search(matches("вложений"))).isEmpty();
+    }
+
     private String explain(String sql, Object... parameters)
     {
         EntityManager em = entityManager.getEntityManager();
@@ -537,6 +623,12 @@ class PostgresRepositoryTest {
         ReflectionTestUtils.setField(listing, "status", ListingStatus.ACTIVE);
         ReflectionTestUtils.setField(listing, "publishedAt", publishedAt);
         return listingRepository.save(listing).getId();
+    }
+
+    private Listing described(String model, String description)
+    {
+        return Listing.draft(seller, new ListingDetails("Toyota", model, null, 200, 2015, 50000, null, null, null,
+                new BigDecimal("8500000"), "Самара", description), Instant.now());
     }
 
     private Listing priced(String model, int year, String price, int mileage)

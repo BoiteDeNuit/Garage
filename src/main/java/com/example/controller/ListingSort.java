@@ -17,6 +17,17 @@ public final class ListingSort {
     {
         return checked(pageable, Sort.by(Sort.Direction.DESC, "publishedAt"));
     }
+    // Поиск по словам: без сортировки от клиента порядок задаёт релевантность, его ставит ListingService.findPublic.
+    // Если сортировка пришла, проверяется как обычно
+    public static Pageable forTextSearch(Pageable pageable)
+    {
+        if(pageable.getSort().isSorted())
+        {
+            return forPublicFeed(pageable);
+        }
+        checkOffset(pageable);
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+    }
     public static Pageable forOwnerList(Pageable pageable)
     {
         return checked(pageable, Sort.by(Sort.Direction.DESC, "createdAt"));
@@ -27,11 +38,7 @@ public final class ListingSort {
     }
     private static Pageable checked(Pageable pageable, Sort defaultSort)
     {
-        // Смещение страницы считается в int: page=30000000 при size=100 переполнил бы его и дал 500
-        if((long) pageable.getPageNumber() * pageable.getPageSize() > Integer.MAX_VALUE)
-        {
-            throw new InvalidRequestException("Слишком большой номер страницы");
-        }
+        checkOffset(pageable);
         Sort source = pageable.getSort().isSorted() ? pageable.getSort() : defaultSort;
         List<Sort.Order> orders = new ArrayList<>();
         for(Sort.Order order : source)
@@ -49,5 +56,13 @@ public final class ListingSort {
             sort = sort.and(Sort.by(Sort.Direction.DESC, "id"));
         }
         return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
+    }
+    // Смещение страницы считается в int: page=30000000 при size=100 переполнил бы его и дал 500
+    private static void checkOffset(Pageable pageable)
+    {
+        if((long) pageable.getPageNumber() * pageable.getPageSize() > Integer.MAX_VALUE)
+        {
+            throw new InvalidRequestException("Слишком большой номер страницы");
+        }
     }
 }

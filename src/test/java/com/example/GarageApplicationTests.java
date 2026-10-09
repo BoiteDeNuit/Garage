@@ -341,6 +341,29 @@ class GarageApplicationTests extends IntegrationTest {
         assertThat(models).containsExactlyInAnyOrderElementsOf(expected);
     }
 
+    // Поиск по словам через API: совпадение в модели (вес A) выше совпадения в описании (вес B), хотя оно старее
+    // и вставлено позже — без ранжирования порядок был бы обратный. С sort порядок от клиента, лента по курсору — по дате.
+    // Черновик со словом в модели не находится
+    @Test
+    void textSearchThroughApi() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        String brand = uniqueBrand();
+        Long inDescription = insertDescribed(seller, brand, "Corolla", "Не хуже, чем Camry", ListingStatus.ACTIVE, Instant.parse("2026-10-01T10:00:00Z"));
+        Long inModel = insertDescribed(seller, brand, "Camry", null, ListingStatus.ACTIVE, Instant.parse("2026-09-01T10:00:00Z"));
+        insertDescribed(seller, brand, "Rio", "Небольшой пробег", ListingStatus.ACTIVE, Instant.parse("2026-10-02T10:00:00Z"));
+        insertDescribed(seller, brand, "Camry", null, ListingStatus.DRAFT, null);
+
+        JsonNode byRank = page(get("/api/listings").param("q", "camry").param("brand", brand));
+        JsonNode bySort = page(get("/api/listings").param("q", "camry").param("brand", brand).param("sort", "publishedAt,desc"));
+        JsonNode feed = page(get("/api/listings/feed").param("q", "camry").param("brand", brand));
+
+        assertThat(ids(byRank.get("content"))).containsExactly(inModel, inDescription);
+        assertThat(byRank.get("page").get("totalElements").asLong()).isEqualTo(2);
+        assertThat(ids(bySort.get("content"))).containsExactly(inDescription, inModel);
+        assertThat(ids(feed.get("items"))).containsExactly(inDescription, inModel);
+    }
+
     // Пока листают ленту, сверху появляются новые объявления. Курсор не пускает их в следующие страницы
     // и ничего не теряет: каждое из 25 исходных ровно один раз и по порядку. Пять опубликованы
     // в одну микросекунду — между ними порядок держит id
@@ -708,6 +731,23 @@ class GarageApplicationTests extends IntegrationTest {
         return jdbcTemplate.queryForObject("insert into listings (seller_id, status, brand, model, horse_power, year, mileage_km, price, city, published_at) " +
                         "values (?, 'ACTIVE', ?, 'Supra', 320, 1998, 150000, 4500000, 'Самара', ?) returning id",
                 Long.class, seller.getId(), brand, Timestamp.from(publishedAt));
+    }
+
+    private Long insertDescribed(AppUser seller, String brand, String model, String description, ListingStatus status, Instant publishedAt)
+    {
+        return jdbcTemplate.queryForObject("insert into listings (seller_id, status, brand, model, horse_power, year, price, city, description, published_at) " +
+                        "values (?, ?, ?, ?, 200, 2015, 2000000, 'Самара', ?, ?) returning id",
+                Long.class, seller.getId(), status.name(), brand, model, description, publishedAt == null ? null : Timestamp.from(publishedAt));
+    }
+
+    private JsonNode page(MockHttpServletRequestBuilder request) throws Exception
+    {
+        return objectMapper.readTree(mockMvc.perform(request).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    }
+
+    private List<Long> ids(JsonNode items)
+    {
+        return items.valueStream().map(item -> item.get("id").asLong()).toList();
     }
 
     private JsonNode feed(String brand, String cursor, int size) throws Exception

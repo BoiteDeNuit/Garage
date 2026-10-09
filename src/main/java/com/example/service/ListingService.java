@@ -142,14 +142,21 @@ public class ListingService {
         listing.checkDeletable();
         repository.delete(listing);
     }
-    // Статус в фильтре всегда: какие бы параметры ни пришли, в ленту попадают только опубликованные
+    // Статус в фильтре всегда: какие бы параметры ни пришли, в ленту попадают только опубликованные.
+    // Поиск по словам без сортировки от клиента идёт по релевантности: ListingSort.forTextSearch сортировку не ставит
     @Transactional(readOnly = true)
     public Page<ListingDto> findPublic(ListingSearchCriteria criteria, Pageable pageable)
     {
-        return repository.findAll(publicFilter(criteria), pageable).map(ListingMapper::toDto);
+        Specification<Listing> filter = publicFilter(criteria);
+        if(criteria.hasText() && pageable.getSort().isUnsorted())
+        {
+            filter = filter.and(ListingSpecifications.mostRelevantFirst(criteria.q()));
+        }
+        return repository.findAll(filter, pageable).map(ListingMapper::toDto);
     }
     // Лента по курсору: без count и без offset. Берём на одну строку больше, чтобы узнать, есть ли продолжение.
-    // Порядок фиксированный — по нему построен курсор и индекс idx_listings_feed
+    // Порядок фиксированный — по нему построен курсор и индекс idx_listings_feed. С q лента тоже по дате:
+    // курсор по рангу не построить, ранг не хранится и не индексируется
     @Transactional(readOnly = true)
     public FeedPage findFeed(ListingSearchCriteria criteria, @Nullable FeedCursor after, int size)
     {
@@ -168,6 +175,7 @@ public class ListingService {
     {
         return Specification.allOf(
                 ListingSpecifications.hasStatus(ListingStatus.ACTIVE),
+                ListingSpecifications.matches(criteria.q()),
                 ListingSpecifications.brand(criteria.brand()),
                 ListingSpecifications.model(criteria.model()),
                 ListingSpecifications.yearBetween(criteria.yearFrom(), criteria.yearTo()),

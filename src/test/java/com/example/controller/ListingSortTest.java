@@ -45,6 +45,34 @@ class ListingSortTest {
         assertThat(result.getSort()).isEqualTo(Sort.by(Sort.Order.asc("id")));
     }
 
+    // Без sort порядок задаст релевантность в сервисе: здесь сортировку не ставим, даже id
+    @Test
+    void textSearchWithoutSortStaysUnsorted()
+    {
+        Pageable result = ListingSort.forTextSearch(PageRequest.of(1, 20));
+
+        assertThat(result.getPageNumber()).isEqualTo(1);
+        assertThat(result.getSort().isUnsorted()).isTrue();
+    }
+
+    @Test
+    void textSearchWithSortIsCheckedLikeFeed()
+    {
+        Pageable result = ListingSort.forTextSearch(PageRequest.of(0, 20, Sort.by(Sort.Order.asc("price"))));
+
+        assertThat(result.getSort()).isEqualTo(Sort.by(Sort.Order.asc("price"), Sort.Order.desc("id")));
+        assertThatThrownBy(() -> ListingSort.forTextSearch(PageRequest.of(0, 20, Sort.by("description"))))
+                .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
+    void textSearchChecksPageOverflowToo()
+    {
+        assertThatThrownBy(() -> ListingSort.forTextSearch(PageRequest.of(30_000_000, 100)))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessage("Слишком большой номер страницы");
+    }
+
     @Test
     void fieldOutsideWhitelistIsRejected()
     {

@@ -6,6 +6,9 @@ import com.example.model.Listing;
 import com.example.model.ListingStatus;
 import com.example.model.Listing_;
 import com.example.model.Transmission;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Root;
 import jakarta.persistence.metamodel.SingularAttribute;
 import org.hibernate.query.criteria.HibernateCriteriaBuilder;
 import org.springframework.data.jpa.domain.Specification;
@@ -55,6 +58,34 @@ public final class ListingSpecifications {
                 cb.or(cb.lessThan(root.get(Listing_.publishedAt), publishedAt),
                         cb.lessThan(root.get(Listing_.id), id)));
     }
+    // Полнотекстовый поиск по марке, модели и описанию: search_vector @@ websearch_to_tsquery('russian', ?).
+    // Под это условие подходит GIN idx_listings_search (V13). Слова приводятся к основе: «пробегом» найдёт «пробег».
+    // Запрос из одних стоп-слов («и», «на») Postgres превращает в пустой, а с пустым запросом @@ ложно — ничего не найдётся
+    public static Specification<Listing> matches(String text)
+    {
+        if(text == null || text.isBlank())
+        {
+            return Specification.unrestricted();
+        }
+        String trimmed = text.trim();
+        return (root, query, cb) -> cb.isTrue(cb.function("fts_matches", Boolean.class, searchVector(root, cb), ((HibernateCriteriaBuilder) cb).value(trimmed)));
+    }
+    // Не фильтр, а порядок: сначала релевантные, при равном ранге новые. Свой order by Spring Data ставит,
+    // только если в Pageable есть сортировка, а из count-запроса order by убирает сам.
+    // ts_rank считается для каждой найденной строки: GIN находит строки, но не упорядочивает их
+    public static Specification<Listing> mostRelevantFirst(String text)
+    {
+        if(text == null || text.isBlank())
+        {
+            return Specification.unrestricted();
+        }
+        String trimmed = text.trim();
+        return (root, query, cb) -> {
+            Expression<Float> rank = cb.function("fts_rank", Float.class, searchVector(root, cb), ((HibernateCriteriaBuilder) cb).value(trimmed));
+            query.orderBy(cb.desc(rank), cb.desc(root.get(Listing_.publishedAt)), cb.desc(root.get(Listing_.id)));
+            return null;
+        };
+    }
     public static Specification<Listing> fuelType(FuelType fuelType)
     {
         return equalTo(Listing_.fuelType, fuelType);
@@ -80,6 +111,11 @@ public final class ListingSpecifications {
         }
         String trimmed = value.trim();
         return (root, query, cb) -> cb.equal(cb.upper(root.get(attribute)), cb.upper(((HibernateCriteriaBuilder) cb).value(trimmed)));
+    }
+    // Колонка search_vector не замаплена: функция из FullTextFunctions подставляет её с алиасом таблицы из root
+    private static Expression<Object> searchVector(Root<Listing> root, CriteriaBuilder cb)
+    {
+        return cb.function("listing_search_vector", Object.class, root.get(Listing_.id));
     }
     private static <V> Specification<Listing> equalTo(SingularAttribute<Listing, V> attribute, V value)
     {

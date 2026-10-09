@@ -35,17 +35,20 @@ public class ListingController {
     private final ListingService listings;
     public ListingController(ListingService listings) { this.listings=listings; }
     @Operation(summary = "Лента объявлений", description = "Только опубликованные. Фильтры необязательные, границы «от» и «до» включаются. "
-            + "Пагинация, сортировка: publishedAt, createdAt, price, year, mileageKm, horsePower, id")
+            + "Пагинация, сортировка: publishedAt, createdAt, price, year, mileageKm, horsePower, id. "
+            + "С q и без sort сначала самые подходящие под запрос, без q — новые")
     @ApiResponse(responseCode = "200", description = "OK")
     @ApiResponse(responseCode = "400", description = "Неверный фильтр: «от» больше «до», значение не из списка, нельзя сортировать по этому полю")
     @GetMapping
     public Page<ListingDto> feed(@Valid @ParameterObject ListingSearchCriteria criteria,
                                  @ParameterObject @PageableDefault(size = 20) Pageable pageable)
     {
-        return listings.findPublic(criteria, ListingSort.forPublicFeed(pageable));
+        Pageable page = criteria.hasText() ? ListingSort.forTextSearch(pageable) : ListingSort.forPublicFeed(pageable);
+        return listings.findPublic(criteria, page);
     }
     @Operation(summary = "Лента по курсору", description = "Только опубликованные, сначала новые, те же фильтры, что у ленты. "
-            + "Без total и номера страницы: следующую берут по nextCursor из ответа. Новые объявления не сдвигают уже отданные страницы")
+            + "Без total и номера страницы: следующую берут по nextCursor из ответа. Новые объявления не сдвигают уже отданные страницы. "
+            + "С q тоже по дате, а не по релевантности")
     @ApiResponse(responseCode = "200", description = "OK")
     @ApiResponse(responseCode = "400", description = "Неверный курсор, размер страницы не от 1 до 100 или неверный фильтр")
     @GetMapping("/feed")

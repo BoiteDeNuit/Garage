@@ -257,9 +257,63 @@ class ListingControllerTest {
                         .param("fuelType", "PETROL").param("transmission", "MANUAL").param("bodyType", "COUPE"))
                 .andExpect(status().isOk());
 
-        verify(service).findPublic(eq(new ListingSearchCriteria("toyota", "supra", 1990, 2005,
+        verify(service).findPublic(eq(new ListingSearchCriteria(null, "toyota", "supra", 1990, 2005,
                 new BigDecimal("1000000"), new BigDecimal("5000000"), 200000, "Самара",
                 FuelType.PETROL, Transmission.MANUAL, BodyType.COUPE)), any(Pageable.class));
+    }
+
+    // Поиск по словам без sort: сортировку не ставим, порядок по релевантности задаст сервис
+    @Test
+    void textSearchWithoutSortIsUnsorted() throws Exception
+    {
+        when(service.findPublic(any(), any(Pageable.class))).thenReturn(Page.empty());
+
+        mockMvc.perform(get("/api/listings").param("q", "небольшой пробег").param("brand", "toyota"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<ListingSearchCriteria> criteria = ArgumentCaptor.forClass(ListingSearchCriteria.class);
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(service).findPublic(criteria.capture(), pageable.capture());
+        assertThat(criteria.getValue().q()).isEqualTo("небольшой пробег");
+        assertThat(criteria.getValue().brand()).isEqualTo("toyota");
+        assertThat(pageable.getValue().getSort().isUnsorted()).isTrue();
+    }
+
+    @Test
+    void textSearchKeepsSortFromClient() throws Exception
+    {
+        when(service.findPublic(any(), any(Pageable.class))).thenReturn(Page.empty());
+
+        mockMvc.perform(get("/api/listings").param("q", "camry").param("sort", "price,asc"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(service).findPublic(any(), pageable.capture());
+        assertThat(pageable.getValue().getSort()).isEqualTo(Sort.by(Sort.Order.asc("price"), Sort.Order.desc("id")));
+    }
+
+    // Пробелы — не поиск: обычная лента по дате
+    @Test
+    void blankQueryIsPlainFeed() throws Exception
+    {
+        when(service.findPublic(any(), any(Pageable.class))).thenReturn(Page.empty());
+
+        mockMvc.perform(get("/api/listings").param("q", "   "))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(service).findPublic(any(), pageable.capture());
+        assertThat(pageable.getValue().getSort()).isEqualTo(Sort.by(Sort.Order.desc("publishedAt"), Sort.Order.desc("id")));
+    }
+
+    @Test
+    void tooLongQueryIs400() throws Exception
+    {
+        mockMvc.perform(get("/api/listings").param("q", "а".repeat(201)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("Поисковый запрос не длиннее 200 символов")));
+
+        verify(service, never()).findPublic(any(), any());
     }
 
     @Test

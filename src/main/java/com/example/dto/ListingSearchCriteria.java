@@ -16,6 +16,10 @@ import java.math.BigDecimal;
 // Фильтры ленты из query-параметров. Все необязательные: чего нет в запросе, по тому не фильтруем.
 // Границы «от» и «до» включаются
 public record ListingSearchCriteria(
+        @Parameter(description = "Слова из марки, модели и описания с учётом словоформ. "
+                + "Фраза в кавычках, or между словами, минус перед словом исключает его", example = "небольшой пробег -дтп")
+        @Size(max = 200, message = "Поисковый запрос не длиннее 200 символов")
+        String q,
         @Parameter(description = "Марка без учёта регистра", example = "Toyota")
         @Size(max = 50, message = "Марка не длиннее 50 символов")
         String brand,
@@ -62,8 +66,13 @@ public record ListingSearchCriteria(
         return priceFrom == null || priceTo == null || priceFrom.compareTo(priceTo) <= 0;
     }
 
+    public boolean hasText()
+    {
+        return q != null && !q.isBlank();
+    }
+
     public static ListingSearchCriteria empty()
     {
-        return new ListingSearchCriteria(null, null, null, null, null, null, null, null, null, null, null);
+        return new ListingSearchCriteria(null, null, null, null, null, null, null, null, null, null, null, null);
     }
 }
