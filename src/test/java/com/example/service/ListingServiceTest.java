@@ -62,6 +62,8 @@ class ListingServiceTest {
     @Mock
     private ListingReader reader;
     @Mock
+    private CarModelCatalog catalog;
+    @Mock
     private CurrencyClient currencyClient;
     @Mock
     private ApplicationEventPublisher events;
@@ -72,7 +74,7 @@ class ListingServiceTest {
     @BeforeEach
     void setUp()
     {
-        service = new ListingService(repository, users, reader, new ListingAccessPolicy(), currencyClient, events, registry, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new ListingService(repository, users, reader, new ListingAccessPolicy(), catalog, currencyClient, events, registry, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -168,6 +170,7 @@ class ListingServiceTest {
         assertThat(result.status()).isEqualTo(ListingStatus.ACTIVE);
         assertThat(result.publishedAt()).isEqualTo(NOW);
         verify(events).publishEvent(new ListingPublishedEvent(1L, 7L, "Toyota", "Supra", new BigDecimal("4500000.00"), NOW));
+        verify(catalog).remember("Toyota", "Supra");
     }
 
     @Test
@@ -193,7 +196,7 @@ class ListingServiceTest {
         assertThatThrownBy(() -> service.publish(1L, principal(7L, Role.USER)))
                 .isInstanceOf(ListingStateException.class)
                 .hasMessage("Для публикации нужна цена");
-        verifyNoInteractions(events);
+        verifyNoInteractions(events, catalog);
         verify(repository, never()).saveAndFlush(any());
     }
 
@@ -309,6 +312,22 @@ class ListingServiceTest {
         assertThat(result.status()).isEqualTo(ListingStatus.DRAFT);
         assertThat(result.sellerId()).isEqualTo(7L);
         assertThat(result.updatedAt()).isEqualTo(NOW);
+        // Черновик в подсказки не попадает, даже после правки
+        verifyNoInteractions(catalog);
+    }
+
+    @Test
+    void editOfPublishedListingGoesToCatalog()
+    {
+        Listing listing = listing();
+        listing.publish(NOW.minusSeconds(3600));
+        ReflectionTestUtils.setField(listing, "version", 2L);
+        when(repository.findById(1L)).thenReturn(Optional.of(listing));
+        when(repository.saveAndFlush(listing)).thenReturn(listing);
+
+        service.update(1L, update(2L, new BigDecimal("3900000")), principal(7L, Role.USER));
+
+        verify(catalog).remember("Toyota", "Supra");
     }
 
     @Test

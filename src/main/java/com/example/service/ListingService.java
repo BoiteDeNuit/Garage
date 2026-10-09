@@ -48,6 +48,7 @@ public class ListingService {
     private final AppUserRepository users;
     private final ListingReader reader;
     private final ListingAccessPolicy policy;
+    private final CarModelCatalog catalog;
     private final CurrencyClient currencyClient;
     private final ApplicationEventPublisher events;
     private final Clock clock;
@@ -56,6 +57,7 @@ public class ListingService {
                           AppUserRepository users,
                           ListingReader reader,
                           ListingAccessPolicy policy,
+                          CarModelCatalog catalog,
                           CurrencyClient currencyClient,
                           ApplicationEventPublisher events,
                           MeterRegistry meterRegistry,
@@ -65,6 +67,7 @@ public class ListingService {
         this.users=users;
         this.reader=reader;
         this.policy=policy;
+        this.catalog=catalog;
         this.currencyClient=currencyClient;
         this.events=events;
         this.clock=clock;
@@ -107,6 +110,11 @@ public class ListingService {
             throw ListingStateException.staleVersion(listing.getVersion());
         }
         listing.updateDetails(ListingMapper.toDetails(request), Instant.now(clock));
+        // Опубликованное видят покупатели: новая марка или модель сразу попадает в подсказки
+        if(listing.getStatus() == ListingStatus.ACTIVE)
+        {
+            catalog.remember(listing.getBrand(), listing.getModel());
+        }
         return toDtoWithNewVersion(listing);
     }
     @Transactional
@@ -115,6 +123,7 @@ public class ListingService {
     {
         Listing listing = loadForChange(id, actor, ListingAction.PUBLISH);
         listing.publish(Instant.now(clock));
+        catalog.remember(listing.getBrand(), listing.getModel());
         events.publishEvent(ListingPublishedEvent.from(listing));
         return toDtoWithNewVersion(listing);
     }

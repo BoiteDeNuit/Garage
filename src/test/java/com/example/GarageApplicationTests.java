@@ -364,6 +364,21 @@ class GarageApplicationTests extends IntegrationTest {
         assertThat(ids(feed.get("items"))).containsExactly(inDescription, inModel);
     }
 
+    // Справочник подсказок пополняется публикацией. Черновик в него не попадает: в черновиках бывают опечатки.
+    // «maskvich» и «Moskvich Supra» похожи на 0,56: ниже порога pg_trgm по умолчанию (0,6), выше нашего (0,4)
+    @Test
+    void publishedModelAppearsInSuggestions() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        String draftOnly = uniqueBrand();
+        Long id = create(seller, supra("Moskvich"));
+        change(id, "publish", seller).andExpect(status().isOk());
+        create(seller, supra(draftOnly));
+
+        assertThat(suggestedBrands("maskvich")).contains("Moskvich");
+        assertThat(suggestedBrands(draftOnly)).doesNotContain(draftOnly);
+    }
+
     // Пока листают ленту, сверху появляются новые объявления. Курсор не пускает их в следующие страницы
     // и ничего не теряет: каждое из 25 исходных ровно один раз и по порядку. Пять опубликованы
     // в одну микросекунду — между ними порядок держит id
@@ -743,6 +758,11 @@ class GarageApplicationTests extends IntegrationTest {
     private JsonNode page(MockHttpServletRequestBuilder request) throws Exception
     {
         return objectMapper.readTree(mockMvc.perform(request).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    }
+
+    private List<String> suggestedBrands(String q) throws Exception
+    {
+        return page(get("/api/models").param("q", q)).valueStream().map(item -> item.get("brand").asString()).toList();
     }
 
     private List<Long> ids(JsonNode items)

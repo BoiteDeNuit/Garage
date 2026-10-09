@@ -973,7 +973,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/listings?q=небольшим пробегом&brand=toyota&size=50",
+              "raw": "{{baseUrl}}/api/listings?q=небольшим пробегом&brand=toyota&model=supra&size=50",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -991,12 +991,56 @@
                   "value": "toyota"
                 },
                 {
+                  "key": "model",
+                  "value": "supra"
+                },
+                {
                   "key": "size",
                   "value": "50"
                 }
               ]
             },
-            "description": "Марка, модель и описание с учётом словоформ. Без sort сначала самые подходящие"
+            "description": "Марка, модель и описание с учётом словоформ, вместе с остальными фильтрами. Без sort сначала самые подходящие"
+          }
+        },
+        {
+          "name": "Подсказка марки с опечаткой",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));",
+                  "const brands = pm.response.json().map(m => m.brand);",
+                  "pm.test(\"toyta подсказывает Toyota\", () => pm.expect(brands).to.include(\"Toyota\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/models?q=toyta",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "models"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "toyta"
+                }
+              ]
+            },
+            "description": "Справочник собирается из опубликованного. Опечатки прощаются, самые похожие первыми"
           }
         },
         {

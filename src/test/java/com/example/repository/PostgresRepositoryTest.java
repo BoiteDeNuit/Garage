@@ -2,6 +2,7 @@ package com.example.repository;
 
 import com.example.model.AppUser;
 import com.example.model.BodyType;
+import com.example.model.CarModel;
 import com.example.model.FuelType;
 import com.example.model.Listing;
 import com.example.model.ListingDetails;
@@ -54,6 +55,8 @@ class PostgresRepositoryTest {
     private ListingRepository listingRepository;
     @Autowired
     private AppUserRepository userRepository;
+    @Autowired
+    private CarModelRepository carModelRepository;
     @Autowired
     private TestEntityManager entityManager;
     private AppUser seller;
@@ -596,6 +599,49 @@ class PostgresRepositoryTest {
 
         assertThat(search(matches("ремень"))).extracting(Listing::getModel).containsExactly("Camry");
         assertThat(search(matches("вложений"))).isEmpty();
+    }
+
+    // Уникальность без учёта регистра держит индекс, повтор молча пропускается
+    @Test
+    void catalogKeepsFirstSpellingOfPair()
+    {
+        carModelRepository.insertIfAbsent("Toyota", "Camry");
+        carModelRepository.insertIfAbsent("TOYOTA", "camry");
+        carModelRepository.insertIfAbsent("Toyota", "Corolla");
+
+        assertThat(carModelRepository.count()).isEqualTo(2);
+        assertThat(carModelRepository.findSimilar("toyota camry", 10)).extracting(CarModel::getModel).first().isEqualTo("Camry");
+    }
+
+    // Опечатка в марке, недописанная модель, марка с дефисом. Совсем непохожее не подсказывается.
+    // С порогом по умолчанию (0,6) опечатка в одну букву не проходит
+    @Test
+    void suggestionsForgiveTyposAndUnfinishedWords()
+    {
+        carModelRepository.insertIfAbsent("Toyota", "Camry");
+        carModelRepository.insertIfAbsent("Toyota", "Corolla");
+        carModelRepository.insertIfAbsent("Kia", "Rio");
+        carModelRepository.insertIfAbsent("Mercedes-Benz", "E-Class");
+
+        assertThat(carModelRepository.findSimilar("toyta", 10)).isEmpty();
+
+        carModelRepository.lowerSimilarityThreshold();
+
+        assertThat(carModelRepository.findSimilar("toyta", 10)).extracting(CarModel::getModel).containsExactly("Camry", "Corolla");
+        assertThat(carModelRepository.findSimilar("camr", 10)).extracting(CarModel::getModel).containsExactly("Camry");
+        assertThat(carModelRepository.findSimilar("mersedes", 10)).extracting(CarModel::getBrand).containsExactly("Mercedes-Benz");
+        assertThat(carModelRepository.findSimilar("volvo", 10)).isEmpty();
+        assertThat(carModelRepository.findSimilar("toyota", 1)).hasSize(1);
+    }
+
+    // Запрос подсказок умеет брать GIN по триграммам. На маленьком справочнике Postgres читает таблицу целиком
+    // и будет прав, поэтому seq scan выключен: проверяется, что индекс подходит к условию
+    @Test
+    void suggestionQueryCanUseTrigramIndex()
+    {
+        assertThat(explain("select m.* from car_models m where ?1 <% (m.brand || ' ' || m.model) "
+                + "order by word_similarity(?1, m.brand || ' ' || m.model) desc, m.brand, m.model limit 10", "toyta"))
+                .contains("idx_car_models_trgm");
     }
 
     private String explain(String sql, Object... parameters)

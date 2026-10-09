@@ -72,6 +72,39 @@ class MigrationOnLegacyDataTest {
         }
     }
 
+    // V14 собирает справочник подсказок из того, что уже публиковали. Черновик с опечаткой и старая
+    // машина без даты публикации в него не попадают, пара в другом регистре — дубль
+    @Test
+    void modelCatalogStartsFromPublishedListings() throws SQLException
+    {
+        String url = createDatabase("catalog");
+        flyway(url).target("13").load().migrate();
+        try (Connection connection = connect(url); Statement st = connection.createStatement())
+        {
+            st.execute("insert into users (username, password_hash, role) values ('seller', 'x', 'USER')");
+            String insert = "insert into listings (seller_id, status, brand, model, horse_power, year, price, published_at) "
+                    + "values ((select id from users), '%s', '%s', '%s', 200, 2015, 2000000, %s)";
+            st.execute(insert.formatted("ACTIVE", "Toyota", "Camry", "now()"));
+            st.execute(insert.formatted("SOLD", "TOYOTA", "camry", "now()"));
+            st.execute(insert.formatted("ARCHIVED", "Kia", "Rio", "now()"));
+            st.execute(insert.formatted("DRAFT", "Toyta", "Camri", "null"));
+            st.execute(insert.formatted("ARCHIVED", "Lada", "Niva", "null"));
+        }
+
+        flyway(url).load().migrate();
+
+        try (Connection connection = connect(url); Statement st = connection.createStatement())
+        {
+            List<String> models = new ArrayList<>();
+            ResultSet rows = st.executeQuery("select brand || ' ' || model from car_models order by id");
+            while (rows.next())
+            {
+                models.add(rows.getString(1));
+            }
+            assertThat(models).containsExactlyInAnyOrder("Toyota Camry", "Kia Rio");
+        }
+    }
+
     @Test
     void emptyDatabaseGetsNoTechnicalUser() throws SQLException
     {
