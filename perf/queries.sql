@@ -41,3 +41,55 @@ select l1_0.id,l1_0.body_type,l1_0.brand,l1_0.city,l1_0.created_at,l1_0.descript
 select l1_0.published_at as cursor_p, l1_0.id as cursor_id from listings l1_0 where l1_0.status='ACTIVE' order by l1_0.published_at desc,l1_0.id desc offset 99999 rows fetch first 1 rows only \gset
 EXPLAIN (ANALYZE, BUFFERS)
 select l1_0.id,l1_0.body_type,l1_0.brand,l1_0.city,l1_0.created_at,l1_0.description,l1_0.engine_code,l1_0.fuel_type,l1_0.horse_power,l1_0.mileage_km,l1_0.model,l1_0.price,l1_0.published_at,l1_0.seller_id,l1_0.status,l1_0.transmission,l1_0.updated_at,l1_0.version,l1_0.year from listings l1_0 where l1_0.status='ACTIVE' and l1_0.published_at<=:'cursor_p' and (l1_0.published_at<:'cursor_p' or l1_0.id<:cursor_id) order by l1_0.published_at desc,l1_0.id desc fetch first 21 rows only;
+
+-- Поиск по словам (?q=). Нужны V12, V13 и описания из seed_text.sql.
+-- Порядок по релевантности: так ListingSpecifications.mostRelevantFirst строит запрос без sort от клиента.
+-- ILIKE — для сравнения: так искали бы подстроку без полнотекстового индекса
+
+-- fts_common: Поиск по словам, частая фраза (15% опубликованных), по релевантности
+EXPLAIN (ANALYZE, BUFFERS)
+select l1_0.id,l1_0.body_type,l1_0.brand,l1_0.city,l1_0.created_at,l1_0.description,l1_0.engine_code,l1_0.fuel_type,l1_0.horse_power,l1_0.mileage_km,l1_0.model,l1_0.price,l1_0.published_at,l1_0.seller_id,l1_0.status,l1_0.transmission,l1_0.updated_at,l1_0.version,l1_0.year from listings l1_0 where l1_0.status='ACTIVE' and (l1_0.search_vector @@ websearch_to_tsquery('russian', 'небольшой пробег')) order by ts_rank(l1_0.search_vector, websearch_to_tsquery('russian', 'небольшой пробег')) desc,l1_0.published_at desc,l1_0.id desc offset 0 rows fetch first 20 rows only;
+
+-- fts_common_count
+EXPLAIN (ANALYZE, BUFFERS)
+select count(l1_0.id) from listings l1_0 where l1_0.status='ACTIVE' and (l1_0.search_vector @@ websearch_to_tsquery('russian', 'небольшой пробег'));
+
+-- fts_rare: Поиск по словам, редкая фраза (0,2%), по релевантности
+EXPLAIN (ANALYZE, BUFFERS)
+select l1_0.id,l1_0.body_type,l1_0.brand,l1_0.city,l1_0.created_at,l1_0.description,l1_0.engine_code,l1_0.fuel_type,l1_0.horse_power,l1_0.mileage_km,l1_0.model,l1_0.price,l1_0.published_at,l1_0.seller_id,l1_0.status,l1_0.transmission,l1_0.updated_at,l1_0.version,l1_0.year from listings l1_0 where l1_0.status='ACTIVE' and (l1_0.search_vector @@ websearch_to_tsquery('russian', 'панорамная крыша')) order by ts_rank(l1_0.search_vector, websearch_to_tsquery('russian', 'панорамная крыша')) desc,l1_0.published_at desc,l1_0.id desc offset 0 rows fetch first 20 rows only;
+
+-- fts_rare_count
+EXPLAIN (ANALYZE, BUFFERS)
+select count(l1_0.id) from listings l1_0 where l1_0.status='ACTIVE' and (l1_0.search_vector @@ websearch_to_tsquery('russian', 'панорамная крыша'));
+
+-- ilike_common: Та же частая фраза через ILIKE, по дате
+EXPLAIN (ANALYZE, BUFFERS)
+select l1_0.id,l1_0.body_type,l1_0.brand,l1_0.city,l1_0.created_at,l1_0.description,l1_0.engine_code,l1_0.fuel_type,l1_0.horse_power,l1_0.mileage_km,l1_0.model,l1_0.price,l1_0.published_at,l1_0.seller_id,l1_0.status,l1_0.transmission,l1_0.updated_at,l1_0.version,l1_0.year from listings l1_0 where l1_0.status='ACTIVE' and l1_0.description ilike '%небольшой пробег%' order by l1_0.published_at desc,l1_0.id desc offset 0 rows fetch first 20 rows only;
+
+-- ilike_common_count
+EXPLAIN (ANALYZE, BUFFERS)
+select count(l1_0.id) from listings l1_0 where l1_0.status='ACTIVE' and l1_0.description ilike '%небольшой пробег%';
+
+-- ilike_rare: Та же редкая фраза через ILIKE, по дате
+EXPLAIN (ANALYZE, BUFFERS)
+select l1_0.id,l1_0.body_type,l1_0.brand,l1_0.city,l1_0.created_at,l1_0.description,l1_0.engine_code,l1_0.fuel_type,l1_0.horse_power,l1_0.mileage_km,l1_0.model,l1_0.price,l1_0.published_at,l1_0.seller_id,l1_0.status,l1_0.transmission,l1_0.updated_at,l1_0.version,l1_0.year from listings l1_0 where l1_0.status='ACTIVE' and l1_0.description ilike '%панорамная крыша%' order by l1_0.published_at desc,l1_0.id desc offset 0 rows fetch first 20 rows only;
+
+-- ilike_rare_count
+EXPLAIN (ANALYZE, BUFFERS)
+select count(l1_0.id) from listings l1_0 where l1_0.status='ACTIVE' and l1_0.description ilike '%панорамная крыша%';
+
+-- fts_common_by_date: Частая фраза по дате, как /feed?q= и ?q=&sort=publishedAt,desc
+EXPLAIN (ANALYZE, BUFFERS)
+select l1_0.id,l1_0.body_type,l1_0.brand,l1_0.city,l1_0.created_at,l1_0.description,l1_0.engine_code,l1_0.fuel_type,l1_0.horse_power,l1_0.mileage_km,l1_0.model,l1_0.price,l1_0.published_at,l1_0.seller_id,l1_0.status,l1_0.transmission,l1_0.updated_at,l1_0.version,l1_0.year from listings l1_0 where l1_0.status='ACTIVE' and (l1_0.search_vector @@ websearch_to_tsquery('russian', 'небольшой пробег')) order by l1_0.published_at desc,l1_0.id desc fetch first 21 rows only;
+
+-- fts_rare_by_date: Редкая фраза по дате
+EXPLAIN (ANALYZE, BUFFERS)
+select l1_0.id,l1_0.body_type,l1_0.brand,l1_0.city,l1_0.created_at,l1_0.description,l1_0.engine_code,l1_0.fuel_type,l1_0.horse_power,l1_0.mileage_km,l1_0.model,l1_0.price,l1_0.published_at,l1_0.seller_id,l1_0.status,l1_0.transmission,l1_0.updated_at,l1_0.version,l1_0.year from listings l1_0 where l1_0.status='ACTIVE' and (l1_0.search_vector @@ websearch_to_tsquery('russian', 'панорамная крыша')) order by l1_0.published_at desc,l1_0.id desc fetch first 21 rows only;
+
+-- fts_brand: Частая фраза + марка, по релевантности
+EXPLAIN (ANALYZE, BUFFERS)
+select l1_0.id,l1_0.body_type,l1_0.brand,l1_0.city,l1_0.created_at,l1_0.description,l1_0.engine_code,l1_0.fuel_type,l1_0.horse_power,l1_0.mileage_km,l1_0.model,l1_0.price,l1_0.published_at,l1_0.seller_id,l1_0.status,l1_0.transmission,l1_0.updated_at,l1_0.version,l1_0.year from listings l1_0 where l1_0.status='ACTIVE' and (l1_0.search_vector @@ websearch_to_tsquery('russian', 'небольшой пробег')) and upper(l1_0.brand)=upper('Toyota') order by ts_rank(l1_0.search_vector, websearch_to_tsquery('russian', 'небольшой пробег')) desc,l1_0.published_at desc,l1_0.id desc offset 0 rows fetch first 20 rows only;
+
+-- fts_brand_count
+EXPLAIN (ANALYZE, BUFFERS)
+select count(l1_0.id) from listings l1_0 where l1_0.status='ACTIVE' and (l1_0.search_vector @@ websearch_to_tsquery('russian', 'небольшой пробег')) and upper(l1_0.brand)=upper('Toyota');
