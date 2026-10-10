@@ -23,4 +23,19 @@ public class KafkaTopicsConfig {
                 .replicas(1)
                 .build();
     }
+    // DLT пишет сообщение в ту же партицию, что у исходного, поэтому партиций не меньше
+    @Bean
+    public NewTopic listingPublishedDeadLetterTopic() {
+        return TopicBuilder.name(LISTING_PUBLISHED + "-dlt")
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+    @Bean
+    public NewTopic listingPriceDroppedDeadLetterTopic() {
+        return TopicBuilder.name(LISTING_PRICE_DROPPED + "-dlt")
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
 }

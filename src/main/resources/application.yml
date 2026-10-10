@@ -6,11 +6,16 @@ spring:
       value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
       properties:
         max.block.ms: 5000
+    # ErrorHandlingDeserializer — обёртка над настоящими десериализаторами. Битое сообщение не роняет poll
+    # в бесконечный цикл на одном и том же offset, а доходит до обработчика ошибок как DeserializationException
+    # и уходит в DLT (KafkaErrorConfig)
     consumer:
-      key-deserializer: org.apache.kafka.common.serialization.LongDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
+      key-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       auto-offset-reset: earliest
       properties:
+        spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.LongDeserializer
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
         spring.json.trusted.packages: com.example.event
   data:
     redis:
