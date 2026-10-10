@@ -2,6 +2,7 @@ package com.example.model;
 
 import jakarta.persistence.*;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -23,6 +24,10 @@ public class Notification {
     private Long listingId;
     @Column(name = "saved_search_id")
     private Long savedSearchId;
+    @Column(updatable = false, precision = 12, scale = 2)
+    private BigDecimal oldPrice;
+    @Column(updatable = false, precision = 12, scale = 2)
+    private BigDecimal newPrice;
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
     private Instant readAt;
@@ -51,6 +56,14 @@ public class Notification {
     public Long getSavedSearchId()
     {
         return savedSearchId;
+    }
+    public BigDecimal getOldPrice()
+    {
+        return oldPrice;
+    }
+    public BigDecimal getNewPrice()
+    {
+        return newPrice;
     }
     public Instant getCreatedAt()
     {

@@ -10,6 +10,7 @@ import com.example.dto.ListingPriceDto;
 import com.example.dto.ListingRequest;
 import com.example.dto.ListingStats;
 import com.example.dto.ListingUpdateRequest;
+import com.example.event.ListingPriceDroppedEvent;
 import com.example.event.ListingPublishedEvent;
 import com.example.exception.EntityNotFoundException;
 import com.example.exception.ListingStateException;
@@ -28,6 +29,8 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -333,6 +336,40 @@ class ListingServiceTest {
         service.update(1L, update(2L, new BigDecimal("3900000")), principal(7L, Role.USER));
 
         verify(catalog).remember("Toyota", "Supra");
+    }
+
+    // Снижение цены опубликованного — событие для избранного. Было 4500000, стало 3900000
+    @Test
+    void priceDropOfPublishedListingIsAnnounced()
+    {
+        Listing listing = listing();
+        listing.publish(NOW.minusSeconds(3600));
+        ReflectionTestUtils.setField(listing, "version", 2L);
+        when(repository.findById(1L)).thenReturn(Optional.of(listing));
+        when(repository.saveAndFlush(listing)).thenReturn(listing);
+
+        service.update(1L, update(2L, new BigDecimal("3900000")), principal(7L, Role.USER));
+
+        verify(events).publishEvent(new ListingPriceDroppedEvent(1L, 7L, new BigDecimal("4500000.00"), new BigDecimal("3900000.00"), NOW));
+    }
+
+    // Рост цены, та же цена в другом масштабе (4500000 против 4500000.00) и снижение у черновика — не новость
+    @ParameterizedTest
+    @CsvSource({"4600000, true", "4500000, true", "4500000.00, true", "3900000, false"})
+    void onlyRealDropOfPublishedListingIsAnnounced(String newPrice, boolean published)
+    {
+        Listing listing = listing();
+        if(published)
+        {
+            listing.publish(NOW.minusSeconds(3600));
+        }
+        ReflectionTestUtils.setField(listing, "version", 2L);
+        when(repository.findById(1L)).thenReturn(Optional.of(listing));
+        when(repository.saveAndFlush(listing)).thenReturn(listing);
+
+        service.update(1L, update(2L, new BigDecimal(newPrice)), principal(7L, Role.USER));
+
+        verify(events, never()).publishEvent(any(ListingPriceDroppedEvent.class));
     }
 
     @Test

@@ -11,6 +11,7 @@ import com.example.dto.ListingRequest;
 import com.example.dto.ListingSearchCriteria;
 import com.example.dto.ListingStats;
 import com.example.dto.ListingUpdateRequest;
+import com.example.event.ListingPriceDroppedEvent;
 import com.example.event.ListingPublishedEvent;
 import com.example.exception.EntityNotFoundException;
 import com.example.exception.ListingStateException;
@@ -116,11 +117,18 @@ public class ListingService {
         {
             throw ListingStateException.staleVersion(listing.getVersion());
         }
+        BigDecimal oldPrice = listing.getPrice();
         listing.updateDetails(ListingMapper.toDetails(request), Instant.now(clock));
         // Опубликованное видят покупатели: новая марка или модель сразу попадает в подсказки
         if(listing.getStatus() == ListingStatus.ACTIVE)
         {
             catalog.remember(listing.getBrand(), listing.getModel());
+            // compareTo, а не equals: 4500000 и 4500000.00 — одна цена, а equals сравнил бы и масштаб.
+            // Событие уйдёт в Kafka после коммита (ListingEventsRelay)
+            if(listing.getPrice().compareTo(oldPrice) < 0)
+            {
+                events.publishEvent(new ListingPriceDroppedEvent(listing.getId(), listing.getSeller().getId(), oldPrice, listing.getPrice(), listing.getUpdatedAt()));
+            }
         }
         return toDtoWithNewVersion(listing);
     }

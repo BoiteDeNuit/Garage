@@ -1911,6 +1911,112 @@
           }
         },
         {
+          "name": "Продавец снижает цену",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"listingVersion\", pm.response.json().version);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sellerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/listings/{{listingId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listings",
+                "{{listingId}}"
+              ]
+            },
+            "description": "Цена опубликованного стала ниже: у кого объявление в избранном, получат уведомление",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"version\": {{listingVersion}},\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"fuelType\": \"PETROL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": 4000000,\n  \"city\": \"Самара\",\n  \"description\": \"Небольшой пробег, один владелец\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Уведомление о снижении цены",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 2000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));",
+                  "const drop = pm.response.json().content.find(n => n.type === \"PRICE_DROP\" && n.listingId === pm.collectionVariables.get(\"listingId\"));",
+                  "pm.test(\"было 4,5 млн, стало 4 млн\", () => { pm.expect(drop.oldPrice).to.eql(4500000); pm.expect(drop.newPrice).to.eql(4000000); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{buyerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/me/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me",
+                "notifications"
+              ]
+            },
+            "description": "Событие идёт через Kafka, поэтому пауза перед запросом"
+          }
+        },
+        {
           "name": "Моё избранное",
           "event": [
             {

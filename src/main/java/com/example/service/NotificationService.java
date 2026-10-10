@@ -2,6 +2,7 @@ package com.example.service;
 
 import com.example.dto.NotificationDto;
 import com.example.dto.UnreadCount;
+import com.example.event.ListingPriceDroppedEvent;
 import com.example.event.ListingPublishedEvent;
 import com.example.model.Notification;
 import com.example.model.NotificationType;
@@ -42,6 +43,12 @@ public class NotificationService {
         }
         return created;
     }
+    // Снижение цены — тем, у кого объявление в избранном. Повтор события так же упирается в UNIQUE
+    @Transactional
+    public int notifyFavorites(ListingPriceDroppedEvent event)
+    {
+        return notifications.insertPriceDrops(event.listingId(), event.eventId(), event.oldPrice(), event.newPrice(), Instant.now(clock));
+    }
     @Transactional(readOnly = true)
     public Page<NotificationDto> list(AppUserPrincipal user, Pageable pageable)
     {
@@ -60,6 +67,7 @@ public class NotificationService {
     private NotificationDto toDto(Notification notification)
     {
         return new NotificationDto(notification.getId(), notification.getType(), notification.getListingId(),
-                notification.getSavedSearchId(), notification.getCreatedAt(), notification.getReadAt() != null);
+                notification.getSavedSearchId(), notification.getOldPrice(), notification.getNewPrice(),
+                notification.getCreatedAt(), notification.getReadAt() != null);
     }
 }

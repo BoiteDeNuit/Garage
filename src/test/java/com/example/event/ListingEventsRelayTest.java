@@ -22,12 +22,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ListingEventsRelayTest {
     @Mock
-    private KafkaTemplate<Long, ListingPublishedEvent> kafkaTemplate;
+    private KafkaTemplate<Long, Object> kafkaTemplate;
     private final MeterRegistry registry = new SimpleMeterRegistry();
     private ListingEventsRelay relay;
     private final ListingPublishedEvent event = new ListingPublishedEvent(1L, 7L, "Toyota", "Supra", new BigDecimal("4500000.00"), Instant.parse("2026-10-08T12:00:00Z"));
@@ -75,7 +76,7 @@ class ListingEventsRelayTest {
     @Test
     void doesNotWaitForBroker()
     {
-        CompletableFuture<SendResult<Long, ListingPublishedEvent>> pending = new CompletableFuture<>();
+        CompletableFuture<SendResult<Long, Object>> pending = new CompletableFuture<>();
         when(kafkaTemplate.send(anyString(), anyLong(), any())).thenReturn(pending);
 
         assertTimeoutPreemptively(Duration.ofSeconds(1), () -> relay.onListingPublished(event));
@@ -83,6 +84,20 @@ class ListingEventsRelayTest {
 
         pending.completeExceptionally(new KafkaException("брокер не ответил"));
         assertThat(counter("listings.events.failed")).isEqualTo(1.0);
+    }
+
+    // Снижение цены уходит в свой топик с ключом объявления: снижения одного объявления идут по порядку
+    @Test
+    @SuppressWarnings("unchecked")
+    void priceDropGoesToItsTopicByListingKey()
+    {
+        ListingPriceDroppedEvent drop = new ListingPriceDroppedEvent(1L, 7L, new BigDecimal("4500000.00"), new BigDecimal("3900000.00"), Instant.parse("2026-10-10T12:00:00Z"));
+        when(kafkaTemplate.send("listing-price-dropped", 1L, drop)).thenReturn(CompletableFuture.completedFuture(mock(SendResult.class)));
+
+        relay.onPriceDropped(drop);
+
+        verify(kafkaTemplate).send("listing-price-dropped", 1L, drop);
+        assertThat(counter("listings.events.failed")).isZero();
     }
 
     private double counter(String name)

@@ -17,17 +17,17 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @Component
 public class ListingEventsRelay {
     private static final Logger log = LoggerFactory.getLogger(ListingEventsRelay.class);
-    private final KafkaTemplate<Long, ListingPublishedEvent> kafkaTemplate;
+    private final KafkaTemplate<Long, Object> kafkaTemplate;
     private final Counter published;
     private final Counter failed;
-    public ListingEventsRelay(KafkaTemplate<Long, ListingPublishedEvent> kafkaTemplate, MeterRegistry meterRegistry)
+    public ListingEventsRelay(KafkaTemplate<Long, Object> kafkaTemplate, MeterRegistry meterRegistry)
     {
         this.kafkaTemplate=kafkaTemplate;
         this.published=Counter.builder("listings.published")
                 .description("Опубликовано объявлений")
                 .register(meterRegistry);
         this.failed=Counter.builder("listings.events.failed")
-                .description("Событий о публикации, которые не ушли в Kafka")
+                .description("Событий об объявлениях, которые не ушли в Kafka")
                 .register(meterRegistry);
     }
     // Транзакция уже закоммичена: исключение отсюда ничего не откатит и до клиента не дойдёт, поэтому ловим и считаем.
@@ -36,21 +36,31 @@ public class ListingEventsRelay {
     public void onListingPublished(ListingPublishedEvent event)
     {
         published.increment();
+        send(KafkaTopicsConfig.LISTING_PUBLISHED, event.listingId(), event);
+    }
+    // Снижение цены уходит только из закоммиченной правки: откатилась правка — покупатели ничего не узнают
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onPriceDropped(ListingPriceDroppedEvent event)
+    {
+        send(KafkaTopicsConfig.LISTING_PRICE_DROPPED, event.listingId(), event);
+    }
+    private void send(String topic, Long listingId, Object event)
+    {
         try
         {
-            kafkaTemplate.send(KafkaTopicsConfig.LISTING_PUBLISHED, event.listingId(), event)
+            kafkaTemplate.send(topic, listingId, event)
                     .whenComplete((result, error) -> {
                         if (error != null)
                         {
                             failed.increment();
-                            log.warn("Событие о публикации объявления {} не ушло в Kafka: {}", event.listingId(), error.getMessage());
+                            log.warn("Событие {} об объявлении {} не ушло в Kafka: {}", topic, listingId, error.getMessage());
                         }
                     });
         }
         catch (RuntimeException e)
         {
             failed.increment();
-            log.warn("Событие о публикации объявления {} не ушло в Kafka: {}", event.listingId(), e.getMessage());
+            log.warn("Событие {} об объявлении {} не ушло в Kafka: {}", topic, listingId, e.getMessage());
         }
     }
 }
