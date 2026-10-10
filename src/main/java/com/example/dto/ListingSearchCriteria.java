@@ -1,6 +1,8 @@
 package com.example.dto;
 
 import com.example.model.BodyType;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.example.model.FuelType;
 import com.example.model.Transmission;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -14,7 +16,9 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 
 // Фильтры ленты из query-параметров. Все необязательные: чего нет в запросе, по тому не фильтруем.
-// Границы «от» и «до» включаются
+// Границы «от» и «до» включаются. Тот же record — документ сохранённого поиска в jsonb:
+// в JSON только заданные фильтры, без null и без служебных проверок диапазонов
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public record ListingSearchCriteria(
         @Parameter(description = "Слова из марки, модели и описания с учётом словоформ. "
                 + "Фраза в кавычках, or между словами, минус перед словом исключает его", example = "небольшой пробег -дтп")
@@ -53,6 +57,7 @@ public record ListingSearchCriteria(
         BodyType bodyType) {
 
     @Parameter(hidden = true)
+    @JsonIgnore
     @AssertTrue(message = "Год «от» больше года «до»")
     public boolean isYearRangeValid()
     {
@@ -60,6 +65,7 @@ public record ListingSearchCriteria(
     }
 
     @Parameter(hidden = true)
+    @JsonIgnore
     @AssertTrue(message = "Цена «от» больше цены «до»")
     public boolean isPriceRangeValid()
     {
@@ -69,6 +75,19 @@ public record ListingSearchCriteria(
     public boolean hasText()
     {
         return q != null && !q.isBlank();
+    }
+
+    // Пустая строка фильтром не считается, как и в ListingSpecifications
+    public boolean hasAnyFilter()
+    {
+        return hasText() || notBlank(brand) || notBlank(model) || notBlank(city)
+                || yearFrom != null || yearTo != null || priceFrom != null || priceTo != null || mileageTo != null
+                || fuelType != null || transmission != null || bodyType != null;
+    }
+
+    private static boolean notBlank(String value)
+    {
+        return value != null && !value.isBlank();
     }
 
     public static ListingSearchCriteria empty()

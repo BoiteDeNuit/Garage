@@ -1,5 +1,6 @@
 package com.example.dto;
 
+import com.example.model.BodyType;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -85,5 +86,15 @@ class ListingSearchCriteriaTest {
     private ListingSearchCriteria criteria(Integer yearFrom, Integer yearTo, BigDecimal priceFrom, BigDecimal priceTo)
     {
         return new ListingSearchCriteria(null, null, null, yearFrom, yearTo, priceFrom, priceTo, null, null, null, null, null);
+    }
+
+    // Пробелы фильтром не считаются: поиск из одних пробелов совпал бы со всей лентой
+    @Test
+    void blankFieldsAreNoFilter()
+    {
+        assertThat(ListingSearchCriteria.empty().hasAnyFilter()).isFalse();
+        assertThat(new ListingSearchCriteria(" ", "  ", "", null, null, null, null, null, " ", null, null, null).hasAnyFilter()).isFalse();
+        assertThat(new ListingSearchCriteria(null, null, null, null, null, null, null, null, null, null, null, BodyType.SUV).hasAnyFilter()).isTrue();
+        assertThat(new ListingSearchCriteria(null, null, null, null, null, null, null, 200000, null, null, null, null).hasAnyFilter()).isTrue();
     }
 }

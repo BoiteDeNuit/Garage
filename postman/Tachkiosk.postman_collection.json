@@ -1952,6 +1952,101 @@
           }
         },
         {
+          "name": "Сохранить поиск",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"фильтры сохранены\", () => pm.expect(pm.response.json().criteria.model).to.eql(\"supra\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{buyerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/me/searches",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me",
+                "searches"
+              ]
+            },
+            "description": "Те же фильтры, что у ленты, хотя бы один",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Супра до пяти миллионов\",\n  \"criteria\": {\"brand\": \"toyota\", \"model\": \"supra\", \"priceTo\": 5000000}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Мои поиски",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"поиск в списке\", () => pm.expect(pm.response.json()[0].name).to.eql(\"Супра до пяти миллионов\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{buyerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/me/searches",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me",
+                "searches"
+              ]
+            }
+          }
+        },
+        {
           "name": "Статистика",
           "event": [
             {

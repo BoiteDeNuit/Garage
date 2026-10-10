@@ -118,6 +118,11 @@ public class GlobalExceptionHandler {
     {
         return build(HttpStatus.CONFLICT,"Объявление изменили одновременно с вами, обновите и повторите",request);
     }
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ErrorResponse> conflict(ConflictException e, HttpServletRequest request)
+    {
+        return build(HttpStatus.CONFLICT,e.getMessage(),request);
+    }
     @ExceptionHandler(PhotoStateException.class)
     public ResponseEntity<ErrorResponse> photoConflict(PhotoStateException e, HttpServletRequest request)
     {
