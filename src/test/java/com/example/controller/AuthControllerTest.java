@@ -11,6 +11,7 @@ import com.example.security.JwtService;
 import com.example.security.SecurityConfig;
 import com.example.security.SecurityErrorWriter;
 import com.example.service.AuthService;
+import com.example.service.RefreshTokenService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -47,6 +48,8 @@ class AuthControllerTest {
     UserDetailsService userDetailsService;
     @MockitoBean
     RateLimiter rateLimiter;
+    @MockitoBean
+    RefreshTokenService refreshTokenService;
 
     @Test
     void registerReturns201WithoutPassword() throws Exception
@@ -137,5 +140,16 @@ class AuthControllerTest {
                         .content(objectMapper.writeValueAsString(new LoginRequest("spammer", "correct-horse-battery"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value("Аккаунт заблокирован"));
+    }
+
+    // Без куки до сервиса не доходим: 401 с тем же текстом, что и для мёртвого токена
+    @Test
+    void refreshWithoutCookieIs401() throws Exception
+    {
+        mockMvc.perform(post("/auth/refresh"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Сессия истекла, войдите заново"));
+
+        verifyNoInteractions(refreshTokenService);
     }
 }

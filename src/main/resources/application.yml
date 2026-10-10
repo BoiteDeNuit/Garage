@@ -60,6 +60,11 @@ admin:
 jwt:
   secret: ${JWT_SECRET}
   ttl-minutes: 30
+auth:
+  refresh:
+    ttl: 14d
+    # Secure: браузер отдаёт куку только по HTTPS. Локально по http — REFRESH_COOKIE_SECURE=false
+    cookie-secure: ${REFRESH_COOKIE_SECURE:true}
 currency:
   api:
     url: ${CURRENCY_API_URL}

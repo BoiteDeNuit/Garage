@@ -1,7 +1,6 @@
 package com.example;
 
 import com.example.dto.BanRequest;
-import com.example.dto.LoginRequest;
 import com.example.model.AppUser;
 import com.example.model.ListingStatus;
 import com.example.model.Role;
@@ -12,7 +11,6 @@ import jakarta.persistence.LockModeType;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.time.Instant;
@@ -30,8 +28,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class BanTest extends IntegrationTest {
-    @Autowired
-    private PasswordEncoder passwordEncoder;
     @Autowired
     private EntityManagerFactory entityManagerFactory;
 
@@ -54,8 +50,8 @@ class BanTest extends IntegrationTest {
     @Test
     void bannedUserCannotLogIn() throws Exception
     {
-        String username = "u" + UUID.randomUUID().toString().substring(0, 8);
-        AppUser user = userRepository.save(new AppUser(username, passwordEncoder.encode("correct-horse-battery"), Role.USER));
+        AppUser user = createUser(Role.USER, "correct-horse-battery");
+        String username = user.getUsername();
         ban(user, "Мошенничество").andExpect(status().isOk());
 
         login(username, "correct-horse-battery")
@@ -211,16 +207,6 @@ class BanTest extends IntegrationTest {
     {
         return mockMvc.perform(post("/api/admin/users/{username}/ban", user.getUsername()).header("Authorization", bearer(admin()))
                 .contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(new BanRequest(reason))));
-    }
-
-    // Свой адрес на каждый вход: лимит попыток считается по адресу, а другие тесты тоже входят
-    private ResultActions login(String username, String password) throws Exception
-    {
-        String address = "10.28." + (int) (Math.random() * 250) + "." + (int) (Math.random() * 250);
-        return mockMvc.perform(post("/auth/login")
-                .with(request -> { request.setRemoteAddr(address); return request; })
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(new LoginRequest(username, password))));
     }
 
     // Ждём, пока запрос встанет в очередь за блокировкой строки

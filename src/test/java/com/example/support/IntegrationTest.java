@@ -1,5 +1,6 @@
 package com.example.support;
 
+import com.example.dto.LoginRequest;
 import com.example.listener.NotificationsListener;
 import com.example.model.AppUser;
 import com.example.model.ListingStatus;
@@ -12,9 +13,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.testcontainers.containers.GenericContainer;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -32,6 +36,9 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 // Общая база для всех @SpringBootTest. Контейнеры стартуют один раз на весь прогон,
 // контекст тоже один: спаи и свойства объявлять только здесь, иначе Spring поднимет второй контекст
@@ -97,6 +104,8 @@ public abstract class IntegrationTest {
     protected JwtService jwtService;
     @Autowired
     protected JdbcTemplate jdbcTemplate;
+    @Autowired
+    protected PasswordEncoder passwordEncoder;
     @MockitoSpyBean
     protected NotificationsListener notificationsListener;
     // Модерация выключена, как в application.yml. Тест включает её через when(...), после теста spy сбрасывается
@@ -108,6 +117,20 @@ public abstract class IntegrationTest {
     {
         String username = "u" + UUID.randomUUID().toString().substring(0, 8);
         return userRepository.save(new AppUser(username, "!", role));
+    }
+    protected AppUser createUser(Role role, String password)
+    {
+        String username = "u" + UUID.randomUUID().toString().substring(0, 8);
+        return userRepository.save(new AppUser(username, passwordEncoder.encode(password), role));
+    }
+    // Свой адрес на каждый вход: лимит попыток считается по адресу, а входят многие тесты
+    protected ResultActions login(String username, String password) throws Exception
+    {
+        String address = "10." + ThreadLocalRandom.current().nextInt(256) + "." + ThreadLocalRandom.current().nextInt(256) + "." + ThreadLocalRandom.current().nextInt(256);
+        return mockMvc.perform(post("/auth/login")
+                .with(request -> { request.setRemoteAddr(address); return request; })
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new LoginRequest(username, password))));
     }
     protected AppUser admin()
     {

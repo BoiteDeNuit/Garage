@@ -70,7 +70,12 @@ public class GlobalExceptionHandler {
     {
         return build(HttpStatus.UNAUTHORIZED,"Неверный логин или пароль",request);
     }
-    // Пароль верный, но аккаунт заблокирован. Сюда попадают только после проверки пароля (SecurityConfig.authManager)
+    @ExceptionHandler(InvalidRefreshTokenException.class)
+    public ResponseEntity<ErrorResponse> invalidRefresh(InvalidRefreshTokenException e, HttpServletRequest request)
+    {
+        return build(HttpStatus.UNAUTHORIZED,e.getMessage(),request);
+    }
+    // Аккаунт заблокирован: при входе — только после проверки пароля (SecurityConfig.authManager), при обмене refresh-токена
     @ExceptionHandler(LockedException.class)
     public ResponseEntity<ErrorResponse> locked(LockedException e, HttpServletRequest request)
     {

@@ -46,6 +46,10 @@
       "value": ""
     },
     {
+      "key": "buyerRefresh",
+      "value": ""
+    },
+    {
       "key": "listingId",
       "value": ""
     },
@@ -297,7 +301,10 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"200\", () => pm.response.to.have.status(200));",
-                  "pm.collectionVariables.set(\"buyerToken\", pm.response.json().token);"
+                  "pm.collectionVariables.set(\"buyerToken\", pm.response.json().token);",
+                  "const cookie = pm.response.headers.get(\"Set-Cookie\");",
+                  "pm.test(\"refresh в HttpOnly-куке только для /auth\", () => { pm.expect(cookie).to.include(\"HttpOnly\"); pm.expect(cookie).to.include(\"SameSite=Strict\"); pm.expect(cookie).to.include(\"Path=/auth\"); });",
+                  "pm.collectionVariables.set(\"buyerRefresh\", pm.cookies.get(\"refresh_token\"));"
                 ]
               }
             }
@@ -331,6 +338,79 @@
                   "language": "json"
                 }
               }
+            }
+          }
+        },
+        {
+          "name": "Новый токен по refresh-куке",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"buyerToken\", pm.response.json().token);",
+                  "pm.test(\"refresh сменился\", () => pm.expect(pm.cookies.get(\"refresh_token\")).to.not.eql(pm.collectionVariables.get(\"buyerRefresh\")));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Кука refresh_token от входа покупателя уходит сама: Postman хранит куки. Старая после обмена не работает"
+          }
+        },
+        {
+          "name": "Кто я по новому токену",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"покупатель\", () => pm.expect(pm.response.json().username).to.eql(pm.collectionVariables.get(\"buyerUsername\")));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{buyerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me"
+              ]
             }
           }
         },
