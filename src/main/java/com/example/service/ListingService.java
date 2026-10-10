@@ -53,6 +53,8 @@ public class ListingService {
     private final ListingPhotoRepository photos;
     private final ListingAccessPolicy policy;
     private final CarModelCatalog catalog;
+    private final ListingHistory history;
+    private final ModerationSettings moderation;
     private final CurrencyClient currencyClient;
     private final ApplicationEventPublisher events;
     private final Clock clock;
@@ -64,6 +66,8 @@ public class ListingService {
                           ListingPhotoRepository photos,
                           ListingAccessPolicy policy,
                           CarModelCatalog catalog,
+                          ListingHistory history,
+                          ModerationSettings moderation,
                           CurrencyClient currencyClient,
                           ApplicationEventPublisher events,
                           MeterRegistry meterRegistry,
@@ -76,6 +80,8 @@ public class ListingService {
         this.photos=photos;
         this.policy=policy;
         this.catalog=catalog;
+        this.history=history;
+        this.moderation=moderation;
         this.currencyClient=currencyClient;
         this.events=events;
         this.clock=clock;
@@ -90,6 +96,7 @@ public class ListingService {
     {
         Listing listing = Listing.draft(users.getReferenceById(seller.getId()), ListingMapper.toDetails(request), Instant.now(clock));
         Listing saved = repository.save(listing);
+        history.record(saved, null, seller.getId(), null);
         listingsCreated.increment();
         return ListingMapper.toDto(saved);
     }
@@ -137,9 +144,15 @@ public class ListingService {
     public ListingDto publish(Long id, AppUserPrincipal actor)
     {
         Listing listing = loader.forChange(id, actor, ListingAction.PUBLISH);
-        listing.publish(Instant.now(clock));
-        catalog.remember(listing.getBrand(), listing.getModel());
-        events.publishEvent(ListingPublishedEvent.from(listing));
+        ListingStatus from = listing.getStatus();
+        listing.publish(Instant.now(clock), moderation.required());
+        history.record(listing, from, actor.getId(), null);
+        // С модерацией в ленту, подсказки и Kafka объявление попадёт после одобрения, не сейчас
+        if(listing.getStatus() == ListingStatus.ACTIVE)
+        {
+            catalog.remember(listing.getBrand(), listing.getModel());
+            events.publishEvent(ListingPublishedEvent.from(listing));
+        }
         return toDtoWithNewVersion(listing);
     }
     @Transactional
@@ -147,7 +160,9 @@ public class ListingService {
     public ListingDto markSold(Long id, AppUserPrincipal actor)
     {
         Listing listing = loader.forChange(id, actor, ListingAction.MARK_SOLD);
+        ListingStatus from = listing.getStatus();
         listing.markSold(Instant.now(clock));
+        history.record(listing, from, actor.getId(), null);
         return toDtoWithNewVersion(listing);
     }
     @Transactional
@@ -155,7 +170,9 @@ public class ListingService {
     public ListingDto archive(Long id, AppUserPrincipal actor)
     {
         Listing listing = loader.forChange(id, actor, ListingAction.ARCHIVE);
+        ListingStatus from = listing.getStatus();
         listing.archive(Instant.now(clock));
+        history.record(listing, from, actor.getId(), null);
         return toDtoWithNewVersion(listing);
     }
     @Transactional

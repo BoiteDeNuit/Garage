@@ -1,33 +1,34 @@
 package com.example.model;
 
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ListingStatusTest {
+    // Все разрешённые переходы. Остальные из 36 пар запрещены: новый статус без строки здесь уронит тест
+    private static final Set<String> ALLOWED = Set.of(
+            "DRAFT->ACTIVE", "DRAFT->PENDING_REVIEW",
+            "ARCHIVED->ACTIVE", "ARCHIVED->PENDING_REVIEW",
+            "REJECTED->ACTIVE", "REJECTED->PENDING_REVIEW",
+            "PENDING_REVIEW->ACTIVE", "PENDING_REVIEW->REJECTED",
+            "ACTIVE->SOLD", "ACTIVE->ARCHIVED");
 
-    @ParameterizedTest(name = "{0} -> {1}: {2}")
-    @CsvSource({
-            "DRAFT, DRAFT, false",
-            "DRAFT, ACTIVE, true",
-            "DRAFT, SOLD, false",
-            "DRAFT, ARCHIVED, false",
-            "ACTIVE, DRAFT, false",
-            "ACTIVE, ACTIVE, false",
-            "ACTIVE, SOLD, true",
-            "ACTIVE, ARCHIVED, true",
-            "SOLD, DRAFT, false",
-            "SOLD, ACTIVE, false",
-            "SOLD, SOLD, false",
-            "SOLD, ARCHIVED, false",
-            "ARCHIVED, DRAFT, false",
-            "ARCHIVED, ACTIVE, true",
-            "ARCHIVED, SOLD, false",
-            "ARCHIVED, ARCHIVED, false"
-    })
-    void transitions(ListingStatus from, ListingStatus to, boolean allowed)
+    static Stream<Arguments> everyPair()
     {
-        assertThat(from.canTransitionTo(to)).isEqualTo(allowed);
+        return Arrays.stream(ListingStatus.values())
+                .flatMap(from -> Arrays.stream(ListingStatus.values()).map(to -> Arguments.of(from, to)));
+    }
+
+    @ParameterizedTest(name = "{0} -> {1}")
+    @MethodSource("everyPair")
+    void transitions(ListingStatus from, ListingStatus to)
+    {
+        assertThat(from.canTransitionTo(to)).isEqualTo(ALLOWED.contains(from + "->" + to));
     }
 }

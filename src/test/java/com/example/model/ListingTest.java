@@ -27,7 +27,7 @@ class ListingTest {
     {
         Listing listing = draft(new BigDecimal("4500000"), "Самара");
 
-        listing.publish(NOW);
+        listing.publish(NOW, false);
 
         assertThat(listing.getStatus()).isEqualTo(ListingStatus.ACTIVE);
         assertThat(listing.getPublishedAt()).isEqualTo(NOW);
@@ -35,12 +35,86 @@ class ListingTest {
         assertThat(listing.getCreatedAt()).isEqualTo(CREATED);
     }
 
+    // С модерацией публикация — это отправка на проверку: в ленту объявление пока не попадает
+    @Test
+    void publishWithReviewSendsToModeration()
+    {
+        Listing listing = draft(new BigDecimal("4500000"), "Самара");
+
+        listing.publish(NOW, true);
+
+        assertThat(listing.getStatus()).isEqualTo(ListingStatus.PENDING_REVIEW);
+        assertThat(listing.getSubmittedAt()).isEqualTo(NOW);
+        assertThat(listing.getPublishedAt()).isNull();
+    }
+
+    @Test
+    void approvedListingIsPublishedAtApprovalTime()
+    {
+        Listing listing = draft(new BigDecimal("4500000"), "Самара");
+        listing.publish(NOW, true);
+
+        listing.approve(LATER);
+
+        assertThat(listing.getStatus()).isEqualTo(ListingStatus.ACTIVE);
+        assertThat(listing.getPublishedAt()).isEqualTo(LATER);
+    }
+
+    // Отказ с причиной. Исправленное объявление уходит на проверку снова, старая причина стирается
+    @Test
+    void rejectedListingCanBeFixedAndResubmitted()
+    {
+        Listing listing = draft(new BigDecimal("4500000"), "Самара");
+        listing.publish(NOW, true);
+
+        listing.reject("Фото не той машины", NOW);
+        assertThat(listing.getStatus()).isEqualTo(ListingStatus.REJECTED);
+        assertThat(listing.getRejectionReason()).isEqualTo("Фото не той машины");
+
+        listing.updateDetails(details(new BigDecimal("4400000"), "Самара"), LATER);
+        listing.publish(LATER, true);
+        assertThat(listing.getStatus()).isEqualTo(ListingStatus.PENDING_REVIEW);
+        assertThat(listing.getRejectionReason()).isNull();
+    }
+
+    // То, что на проверке, не правится и не публикуется в обход модератора, даже если модерацию выключили
+    @Test
+    void listingUnderReviewIsFrozen()
+    {
+        Listing listing = draft(new BigDecimal("4500000"), "Самара");
+        listing.publish(NOW, true);
+
+        assertThatThrownBy(() -> listing.updateDetails(details(new BigDecimal("1"), "Самара"), LATER))
+                .isInstanceOf(ListingStateException.class)
+                .hasMessage("Объявление на модерации, менять его нельзя");
+        assertThatThrownBy(() -> listing.publish(LATER, false))
+                .isInstanceOf(ListingStateException.class)
+                .hasMessage("Объявление на модерации, менять его нельзя");
+        assertThat(listing.getStatus()).isEqualTo(ListingStatus.PENDING_REVIEW);
+        assertThat(listing.getPrice()).isEqualByComparingTo("4500000");
+    }
+
+    // Одобрить или отклонить можно только то, что ждёт проверки: черновик в обход очереди не опубликовать
+    @Test
+    void onlyPendingListingCanBeDecided()
+    {
+        Listing draft = draft(new BigDecimal("4500000"), "Самара");
+        Listing active = draft(new BigDecimal("4500000"), "Самара");
+        active.publish(NOW, false);
+
+        assertThatThrownBy(() -> draft.approve(LATER)).isInstanceOf(ListingStateException.class).hasMessage("Объявление не ждёт модерации");
+        assertThatThrownBy(() -> draft.reject("нет", LATER)).isInstanceOf(ListingStateException.class);
+        assertThatThrownBy(() -> active.approve(LATER)).isInstanceOf(ListingStateException.class);
+        assertThat(draft.getStatus()).isEqualTo(ListingStatus.DRAFT);
+        assertThat(active.getPublishedAt()).isEqualTo(NOW);
+    }
+
     @Test
     void publishWithoutPriceIsRejectedAndNothingChanges()
     {
         Listing listing = draft(null, "Самара");
 
-        assertThatThrownBy(() -> listing.publish(NOW))
+        assertThatThrownBy(() -> listing.publish(NOW, false))
                 .isInstanceOf(ListingStateException.class)
                 .hasMessage("Для публикации нужна цена");
         assertUntouched(listing);
@@ -53,7 +127,7 @@ class ListingTest {
     {
         Listing listing = draft(new BigDecimal("4500000"), city);
 
-        assertThatThrownBy(() -> listing.publish(NOW))
+        assertThatThrownBy(() -> listing.publish(NOW, false))
                 .isInstanceOf(ListingStateException.class)
                 .hasMessage("Для публикации нужен город");
         assertUntouched(listing);
@@ -64,7 +138,7 @@ class ListingTest {
     {
         Listing listing = published();
 
-        assertThatThrownBy(() -> listing.publish(LATER))
+        assertThatThrownBy(() -> listing.publish(LATER, false))
                 .isInstanceOf(ListingStateException.class)
                 .hasMessage("Нельзя перевести объявление из ACTIVE в ACTIVE");
         assertThat(listing.getPublishedAt()).isEqualTo(NOW);
@@ -88,7 +162,7 @@ class ListingTest {
         Listing listing = published();
         listing.archive(NOW);
 
-        listing.publish(LATER);
+        listing.publish(LATER, false);
 
         assertThat(listing.getStatus()).isEqualTo(ListingStatus.ACTIVE);
         assertThat(listing.getPublishedAt()).isEqualTo(LATER);
@@ -112,7 +186,7 @@ class ListingTest {
         Listing listing = published();
         listing.markSold(NOW);
 
-        assertThatThrownBy(() -> listing.publish(LATER)).isInstanceOf(ListingStateException.class);
+        assertThatThrownBy(() -> listing.publish(LATER, false)).isInstanceOf(ListingStateException.class);
         assertThatThrownBy(() -> listing.archive(LATER)).isInstanceOf(ListingStateException.class);
         assertThatThrownBy(() -> listing.markSold(LATER)).isInstanceOf(ListingStateException.class);
         assertThat(listing.getStatus()).isEqualTo(ListingStatus.SOLD);
@@ -295,7 +369,7 @@ class ListingTest {
     private Listing published()
     {
         Listing listing = draft(new BigDecimal("4500000"), "Самара");
-        listing.publish(NOW);
+        listing.publish(NOW, false);
         return listing;
     }
 

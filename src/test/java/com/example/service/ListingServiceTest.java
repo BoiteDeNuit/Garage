@@ -69,6 +69,10 @@ class ListingServiceTest {
     @Mock
     private CarModelCatalog catalog;
     @Mock
+    private ListingHistory history;
+    @Mock
+    private ModerationSettings moderation;
+    @Mock
     private ListingPhotoRepository photos;
     @Mock
     private CurrencyClient currencyClient;
@@ -82,7 +86,7 @@ class ListingServiceTest {
     void setUp()
     {
         ListingAccessPolicy policy = new ListingAccessPolicy();
-        service = new ListingService(repository, users, reader, new ListingLoader(repository, policy), photos, policy, catalog, currencyClient, events, registry, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new ListingService(repository, users, reader, new ListingLoader(repository, policy), photos, policy, catalog, history, moderation, currencyClient, events, registry, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -185,7 +189,7 @@ class ListingServiceTest {
     void republishFromArchiveSendsEventAgain()
     {
         Listing listing = listing();
-        listing.publish(NOW.minusSeconds(3600));
+        listing.publish(NOW.minusSeconds(3600), false);
         listing.archive(NOW.minusSeconds(60));
         when(repository.findById(1L)).thenReturn(Optional.of(listing));
         when(repository.saveAndFlush(listing)).thenReturn(listing);
@@ -212,7 +216,7 @@ class ListingServiceTest {
     void strangerGets404OnHiddenListing()
     {
         Listing listing = listing();
-        listing.publish(NOW);
+        listing.publish(NOW, false);
         listing.archive(NOW);
         when(repository.findById(1L)).thenReturn(Optional.of(listing));
 
@@ -227,7 +231,7 @@ class ListingServiceTest {
     void strangerGets403OnActiveListing()
     {
         Listing listing = listing();
-        listing.publish(NOW);
+        listing.publish(NOW, false);
         when(repository.findById(1L)).thenReturn(Optional.of(listing));
 
         assertThatThrownBy(() -> service.markSold(1L, principal(8L, Role.USER)))
@@ -240,7 +244,7 @@ class ListingServiceTest {
     void strangerCannotArchive()
     {
         Listing listing = listing();
-        listing.publish(NOW);
+        listing.publish(NOW, false);
         when(repository.findById(1L)).thenReturn(Optional.of(listing));
 
         assertThatThrownBy(() -> service.archive(1L, principal(8L, Role.USER)))
@@ -254,10 +258,10 @@ class ListingServiceTest {
     void rightsAreCheckedBeforeTransition()
     {
         Listing active = listing();
-        active.publish(NOW);
+        active.publish(NOW, false);
         when(repository.findById(1L)).thenReturn(Optional.of(active));
         Listing sold = listing();
-        sold.publish(NOW);
+        sold.publish(NOW, false);
         sold.markSold(NOW);
         when(repository.findById(2L)).thenReturn(Optional.of(sold));
 
@@ -270,7 +274,7 @@ class ListingServiceTest {
     void adminArchivesButCannotPublishOrSell()
     {
         Listing listing = listing();
-        listing.publish(NOW);
+        listing.publish(NOW, false);
         when(repository.findById(1L)).thenReturn(Optional.of(listing));
         when(repository.saveAndFlush(listing)).thenReturn(listing);
         AppUserPrincipal admin = principal(1L, Role.ADMIN);
@@ -296,7 +300,7 @@ class ListingServiceTest {
     void publishingActiveAgainIsConflictWithoutEvent()
     {
         Listing listing = listing();
-        listing.publish(NOW);
+        listing.publish(NOW, false);
         when(repository.findById(1L)).thenReturn(Optional.of(listing));
 
         assertThatThrownBy(() -> service.publish(1L, principal(7L, Role.USER)))
@@ -328,7 +332,7 @@ class ListingServiceTest {
     void editOfPublishedListingGoesToCatalog()
     {
         Listing listing = listing();
-        listing.publish(NOW.minusSeconds(3600));
+        listing.publish(NOW.minusSeconds(3600), false);
         ReflectionTestUtils.setField(listing, "version", 2L);
         when(repository.findById(1L)).thenReturn(Optional.of(listing));
         when(repository.saveAndFlush(listing)).thenReturn(listing);
@@ -343,7 +347,7 @@ class ListingServiceTest {
     void priceDropOfPublishedListingIsAnnounced()
     {
         Listing listing = listing();
-        listing.publish(NOW.minusSeconds(3600));
+        listing.publish(NOW.minusSeconds(3600), false);
         ReflectionTestUtils.setField(listing, "version", 2L);
         when(repository.findById(1L)).thenReturn(Optional.of(listing));
         when(repository.saveAndFlush(listing)).thenReturn(listing);
@@ -361,7 +365,7 @@ class ListingServiceTest {
         Listing listing = listing();
         if(published)
         {
-            listing.publish(NOW.minusSeconds(3600));
+            listing.publish(NOW.minusSeconds(3600), false);
         }
         ReflectionTestUtils.setField(listing, "version", 2L);
         when(repository.findById(1L)).thenReturn(Optional.of(listing));
@@ -390,7 +394,7 @@ class ListingServiceTest {
     void strangerCannotEdit()
     {
         Listing active = listing();
-        active.publish(NOW);
+        active.publish(NOW, false);
         ReflectionTestUtils.setField(active, "version", 1L);
         when(repository.findById(1L)).thenReturn(Optional.of(active));
         when(repository.findById(2L)).thenReturn(Optional.of(listing()));
@@ -422,7 +426,7 @@ class ListingServiceTest {
     void publishedListingCannotBeDeleted()
     {
         Listing listing = listing();
-        listing.publish(NOW);
+        listing.publish(NOW, false);
         when(repository.findById(1L)).thenReturn(Optional.of(listing));
 
         assertThatThrownBy(() -> service.delete(1L, principal(7L, Role.USER)))
@@ -435,7 +439,7 @@ class ListingServiceTest {
     void strangerCannotDelete()
     {
         Listing listing = listing();
-        listing.publish(NOW);
+        listing.publish(NOW, false);
         when(repository.findById(1L)).thenReturn(Optional.of(listing));
         when(repository.findById(2L)).thenReturn(Optional.of(listing()));
 
@@ -618,7 +622,7 @@ class ListingServiceTest {
     private ListingDto card(ListingStatus status, Long sellerId)
     {
         return new ListingDto(1L, sellerId, status, "Toyota", "Supra", "2JZ", 320, 1998, 154000, null, null, null,
-                new BigDecimal("4500000"), "Самара", null, NOW, NOW, null, 0L);
+                new BigDecimal("4500000"), "Самара", null, NOW, NOW, null, 0L, null);
     }
 
     private AppUser user(Long id)

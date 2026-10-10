@@ -99,6 +99,25 @@ class PostgresRepositoryTest {
                 .hasMessageContaining("chk_users_role");
     }
 
+    // Новые роль и статусы проходят пересозданные в V21 CHECK-и
+    @Test
+    void moderationValuesFitDatabaseChecks()
+    {
+        AppUser moderator = userRepository.save(new AppUser("moder", "!", Role.MODERATOR));
+        Listing listing = listingRepository.save(draft("Toyota", "Supra", 320, 1998));
+        entityManager.flush();
+
+        for (String status : List.of("PENDING_REVIEW", "REJECTED"))
+        {
+            entityManager.getEntityManager().createNativeQuery("update listings set status = ?1 where id = ?2")
+                    .setParameter(1, status).setParameter(2, listing.getId()).executeUpdate();
+        }
+        entityManager.clear();
+
+        assertThat(userRepository.findById(moderator.getId()).orElseThrow().getRole()).isEqualTo(Role.MODERATOR);
+        assertThat(listingRepository.findById(listing.getId()).orElseThrow().getStatus()).isEqualTo(ListingStatus.REJECTED);
+    }
+
     @Test
     void feedIndexesReplaceOldBrandIndex()
     {

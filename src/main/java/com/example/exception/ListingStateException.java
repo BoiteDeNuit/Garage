@@ -36,6 +36,14 @@ public class ListingStateException extends RuntimeException {
     {
         return new ListingStateException("Удалить можно только черновик. Опубликованное объявление снимите в архив");
     }
+    public static ListingStateException underReview()
+    {
+        return new ListingStateException("Объявление на модерации, менять его нельзя");
+    }
+    public static ListingStateException notUnderReview()
+    {
+        return new ListingStateException("Объявление не ждёт модерации");
+    }
     public static ListingStateException tooManyPhotos(int max)
     {
         return new ListingStateException("Не больше " + max + " фото на объявление");

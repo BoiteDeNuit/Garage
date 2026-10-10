@@ -32,7 +32,15 @@ class ListingAccessPolicyTest {
             "ARCHIVED, ANONYMOUS, false",
             "ARCHIVED, SELLER, true",
             "ARCHIVED, STRANGER, false",
-            "ARCHIVED, ADMIN, true"
+            "ARCHIVED, ADMIN, true",
+            "PENDING_REVIEW, ANONYMOUS, false",
+            "PENDING_REVIEW, SELLER, true",
+            "PENDING_REVIEW, STRANGER, false",
+            "PENDING_REVIEW, ADMIN, true",
+            "REJECTED, ANONYMOUS, false",
+            "REJECTED, SELLER, true",
+            "REJECTED, STRANGER, false",
+            "REJECTED, ADMIN, true"
     })
     void visibility(ListingStatus status, String viewer, boolean visible)
     {
@@ -70,6 +78,14 @@ class ListingAccessPolicyTest {
 
         assertThat(policy.canPerform(ListingAction.EDIT, SELLER, adminSeller)).isTrue();
         assertThat(policy.canPerform(ListingAction.DELETE, SELLER, adminSeller)).isTrue();
+    }
+
+    // В журнале id модераторов и причины отказов: только продавцу и админу, даже у опубликованного
+    @ParameterizedTest(name = "{0} видит журнал: {1}")
+    @CsvSource({"SELLER, true", "ADMIN, true", "STRANGER, false", "ANONYMOUS, false"})
+    void historyIsForSellerAndAdmin(String viewer, boolean visible)
+    {
+        assertThat(policy.canSeeHistory(SELLER, actor(viewer))).isEqualTo(visible);
     }
 
     @Test

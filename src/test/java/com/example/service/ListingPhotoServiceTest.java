@@ -126,7 +126,7 @@ class ListingPhotoServiceTest {
     void strangerGetsNoLink()
     {
         Listing active = listing();
-        active.publish(NOW);
+        active.publish(NOW, false);
         when(listings.findById(1L)).thenReturn(Optional.of(active));
 
         assertThatThrownBy(() -> service.startUpload(1L, new PhotoUploadRequest("image/jpeg", 100L), principal(8L)))
@@ -138,7 +138,7 @@ class ListingPhotoServiceTest {
     void soldListingGetsNoLink()
     {
         Listing sold = listing();
-        sold.publish(NOW);
+        sold.publish(NOW, false);
         sold.markSold(NOW);
         when(listings.findById(1L)).thenReturn(Optional.of(sold));
 
@@ -203,7 +203,7 @@ class ListingPhotoServiceTest {
     void strangerCannotConfirm()
     {
         Listing active = listing();
-        active.publish(NOW);
+        active.publish(NOW, false);
         when(listings.findById(1L)).thenReturn(Optional.of(active));
 
         assertThatThrownBy(() -> service.confirm(1L, 50L, principal(8L))).isInstanceOf(AccessDeniedException.class);
@@ -290,7 +290,7 @@ class ListingPhotoServiceTest {
     private ListingDto card(ListingStatus status)
     {
         return new ListingDto(1L, 7L, status, "Toyota", "Supra", "2JZ", 320, 1998, 154000, null, null, null,
-                new BigDecimal("4500000"), "Самара", null, NOW, NOW, null, 0L);
+                new BigDecimal("4500000"), "Самара", null, NOW, NOW, null, 0L, null);
     }
 
     private Listing listing()

@@ -6,6 +6,7 @@ import com.example.model.ListingStatus;
 import com.example.model.Role;
 import com.example.repository.AppUserRepository;
 import com.example.security.JwtService;
+import com.example.service.ModerationSettings;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -98,6 +99,9 @@ public abstract class IntegrationTest {
     protected JdbcTemplate jdbcTemplate;
     @MockitoSpyBean
     protected NotificationsListener notificationsListener;
+    // Модерация выключена, как в application.yml. Тест включает её через when(...), после теста spy сбрасывается
+    @MockitoSpyBean
+    protected ModerationSettings moderationSettings;
 
     // База общая на все классы: у каждого теста свои пользователи и марки, на пустые таблицы не рассчитываем
     protected AppUser createUser(Role role)

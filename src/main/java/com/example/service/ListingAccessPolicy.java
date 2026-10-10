@@ -30,6 +30,10 @@ public class ListingAccessPolicy {
         }
         return viewer != null && (viewer.getId().equals(sellerId) || viewer.getRole() == Role.ADMIN);
     }
+    public boolean canSeeHistory(Long sellerId, @Nullable AppUserPrincipal viewer)
+    {
+        return viewer != null && (viewer.getId().equals(sellerId) || viewer.getRole() == Role.ADMIN);
+    }
     // Админ здесь модератор, а не соавтор: снять объявление может, править и продавать за продавца нет
     public boolean canPerform(ListingAction action, Long sellerId, AppUserPrincipal actor)
     {

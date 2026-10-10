@@ -649,6 +649,6 @@ class ListingControllerTest {
     {
         Instant now = Instant.parse("2026-10-07T12:00:00Z");
         return new ListingDto(id, 7L, ListingStatus.ACTIVE, "Toyota", "Supra", "2JZ", 320, 1998, 154000, null, null, null,
-                new BigDecimal("4500000"), "Самара", null, now, now, now, 1L);
+                new BigDecimal("4500000"), "Самара", null, now, now, now, 1L, null);
     }
 }

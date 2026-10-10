@@ -27,5 +27,6 @@ public record ListingDto(Long id,
                          Instant createdAt,
                          Instant updatedAt,
                          Instant publishedAt,
-                         Long version) {
+                         Long version,
+                         String rejectionReason) {
 }

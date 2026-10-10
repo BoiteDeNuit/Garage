@@ -45,6 +45,9 @@ public class Listing {
     @Column(nullable = false)
     private Instant updatedAt;
     private Instant publishedAt;
+    private Instant submittedAt;
+    @Column(length = 500)
+    private String rejectionReason;
     @Version
     private Long version;
     protected Listing() {}
@@ -59,10 +62,17 @@ public class Listing {
         listing.apply(details);
         return listing;
     }
-    // Сначала все проверки, потом изменения: при отказе объект остаётся как был
-    public void publish(Instant now)
+    // Сначала все проверки, потом изменения: при отказе объект остаётся как был.
+    // С модерацией объявление уходит на проверку, опубликует его модератор (approve).
+    // То, что уже ждёт проверки, продавец сам не публикует, даже если модерацию тем временем выключили
+    public void publish(Instant now, boolean reviewRequired)
     {
-        checkTransition(ListingStatus.ACTIVE);
+        if(status == ListingStatus.PENDING_REVIEW)
+        {
+            throw ListingStateException.underReview();
+        }
+        ListingStatus target = reviewRequired ? ListingStatus.PENDING_REVIEW : ListingStatus.ACTIVE;
+        checkTransition(target);
         if(price == null)
         {
             throw ListingStateException.priceRequired();
@@ -71,8 +81,38 @@ public class Listing {
         {
             throw ListingStateException.cityRequired();
         }
+        this.status=target;
+        this.rejectionReason=null;
+        this.updatedAt=now;
+        if(reviewRequired)
+        {
+            this.submittedAt=now;
+        }
+        else
+        {
+            this.publishedAt=now;
+        }
+    }
+    // Решение модератора. Одобрить можно только то, что ждёт проверки: черновик в обход очереди не опубликовать
+    public void approve(Instant now)
+    {
+        if(status != ListingStatus.PENDING_REVIEW)
+        {
+            throw ListingStateException.notUnderReview();
+        }
         this.status=ListingStatus.ACTIVE;
         this.publishedAt=now;
+        this.updatedAt=now;
+    }
+    // Причину видит продавец: исправит и отправит снова
+    public void reject(String reason, Instant now)
+    {
+        if(status != ListingStatus.PENDING_REVIEW)
+        {
+            throw ListingStateException.notUnderReview();
+        }
+        this.status=ListingStatus.REJECTED;
+        this.rejectionReason=reason;
         this.updatedAt=now;
     }
     public void markSold(Instant now)
@@ -99,12 +139,16 @@ public class Listing {
         apply(details);
         this.updatedAt=now;
     }
-    // Проданное не меняется: ни описание, ни фото
+    // Проданное не меняется: ни описание, ни фото. То, что на проверке, тоже: модератор смотрит конкретную версию
     public void checkEditable()
     {
         if(status == ListingStatus.SOLD)
         {
             throw ListingStateException.soldIsFinal();
+        }
+        if(status == ListingStatus.PENDING_REVIEW)
+        {
+            throw ListingStateException.underReview();
         }
     }
     // Удаляется только то, чего никто, кроме продавца, не видел. Опубликованное снимают в архив, история остаётся
@@ -198,6 +242,16 @@ public class Listing {
 
     public String getDescription() {
         return description;
+    }
+
+    public Instant getSubmittedAt()
+    {
+        return submittedAt;
+    }
+
+    public String getRejectionReason()
+    {
+        return rejectionReason;
     }
 
     public Instant getCreatedAt() {

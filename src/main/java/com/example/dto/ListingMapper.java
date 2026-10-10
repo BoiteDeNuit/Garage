@@ -11,7 +11,7 @@ public class ListingMapper {
         return new ListingDto(listing.getId(), listing.getSeller().getId(), listing.getStatus(),
                 listing.getBrand(), listing.getModel(), listing.getEngineCode(), listing.getHorsePower(), listing.getYear(),
                 listing.getMileageKm(), listing.getFuelType(), listing.getTransmission(), listing.getBodyType(), listing.getPrice(), listing.getCity(), listing.getDescription(),
-                listing.getCreatedAt(), listing.getUpdatedAt(), listing.getPublishedAt(), listing.getVersion());
+                listing.getCreatedAt(), listing.getUpdatedAt(), listing.getPublishedAt(), listing.getVersion(), listing.getRejectionReason());
     }
     // Продавец должен быть уже загружен (@EntityGraph), иначе getUsername() даст по запросу на каждую строку
     public static AdminListingDto toAdminDto(Listing listing)

@@ -70,7 +70,7 @@ class FavoriteServiceTest {
     private ListingDto card(ListingStatus status)
     {
         return new ListingDto(1L, 7L, status, "Toyota", "Supra", "2JZ", 320, 1998, 154000, null, null, null,
-                new BigDecimal("4500000"), "Самара", null, NOW, NOW, null, 0L);
+                new BigDecimal("4500000"), "Самара", null, NOW, NOW, null, 0L, null);
     }
 
     private AppUserPrincipal user(Long id)
