@@ -18,6 +18,7 @@ import com.example.model.Role;
 import com.example.repository.ListingPhotoRepository;
 import com.example.repository.ListingRepository;
 import com.example.security.AppUserPrincipal;
+import com.example.storage.PhotoFilesRemoved;
 import com.example.storage.PhotoSignature;
 import com.example.storage.PhotoStorage;
 import com.example.storage.PresignedUpload;
@@ -25,9 +26,12 @@ import com.example.storage.StoredObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -37,6 +41,8 @@ import java.net.URI;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -63,13 +69,15 @@ class ListingPhotoServiceTest {
     private ListingReader reader;
     @Mock
     private PlatformTransactionManager transactionManager;
+    @Mock
+    private ApplicationEventPublisher events;
     private ListingPhotoService service;
 
     @BeforeEach
     void setUp()
     {
         ListingAccessPolicy policy = new ListingAccessPolicy();
-        service = new ListingPhotoService(new ListingLoader(listings, policy), reader, policy, photos, storage, transactionManager, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new ListingPhotoService(new ListingLoader(listings, policy), reader, policy, photos, storage, transactionManager, events, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     // Место — следующее за последним, ключ из UUID под каталогом объявления, в подпись уходят заявленные тип и размер
@@ -210,6 +218,66 @@ class ListingPhotoServiceTest {
         assertThatThrownBy(() -> service.readyPhotos(1L, null)).isInstanceOf(EntityNotFoundException.class);
         assertThatThrownBy(() -> service.readyPhotos(1L, principal(8L))).isInstanceOf(EntityNotFoundException.class);
         verifyNoInteractions(photos, storage);
+    }
+
+    // Строка и сдвиг — сейчас, файл — событием после коммита
+    @Test
+    void deleteClosesGapAndRemovesFileAfterCommit()
+    {
+        ListingPhoto photo = pendingPhoto();
+        ReflectionTestUtils.setField(photo, "position", 3);
+        when(listings.findById(1L)).thenReturn(Optional.of(listing()));
+        when(photos.findByIdAndListingId(50L, 1L)).thenReturn(Optional.of(photo));
+
+        service.delete(1L, 50L, principal(7L));
+
+        verify(photos).delete(photo);
+        verify(photos).closeGap(1L, 3);
+        verify(events).publishEvent(new PhotoFilesRemoved(List.of("listings/1/abc")));
+        verifyNoInteractions(storage);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"51", "51,51", "51,99", "51,52,99"})
+    void reorderNeedsEveryPhotoExactlyOnce(String ids)
+    {
+        when(listings.findById(1L)).thenReturn(Optional.of(listing()));
+        when(photos.findByListingIdOrderByPosition(1L)).thenReturn(List.of(photo(51L, 1, PhotoStatus.READY), photo(52L, 2, PhotoStatus.READY)));
+        List<Long> order = Arrays.stream(ids.split(",")).map(Long::valueOf).toList();
+
+        assertThatThrownBy(() -> service.reorder(1L, order, principal(7L)))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessage("Нужен порядок всех фото объявления, каждое по одному разу");
+    }
+
+    // Места меняются у всех, в ответе только готовые фото в новом порядке
+    @Test
+    void reorderMovesEveryPhoto() throws Exception
+    {
+        ListingPhoto first = photo(51L, 1, PhotoStatus.READY);
+        ListingPhoto pending = photo(52L, 2, PhotoStatus.PENDING);
+        ListingPhoto third = photo(53L, 3, PhotoStatus.READY);
+        when(listings.findById(1L)).thenReturn(Optional.of(listing()));
+        when(photos.findByListingIdOrderByPosition(1L)).thenReturn(List.of(first, pending, third));
+        when(storage.presignDownload(anyString())).thenReturn(URI.create("http://s3/get").toURL());
+
+        List<PhotoDto> result = service.reorder(1L, List.of(53L, 51L, 52L), principal(7L));
+
+        assertThat(third.getPosition()).isEqualTo(1);
+        assertThat(first.getPosition()).isEqualTo(2);
+        assertThat(pending.getPosition()).isEqualTo(3);
+        assertThat(result).extracting(PhotoDto::id).containsExactly(53L, 51L);
+    }
+
+    private ListingPhoto photo(Long id, int position, PhotoStatus status)
+    {
+        ListingPhoto photo = ListingPhoto.pending(listing(), "listings/1/" + id, "image/jpeg", 2000L, position, NOW);
+        ReflectionTestUtils.setField(photo, "id", id);
+        if(status == PhotoStatus.READY)
+        {
+            photo.markReady();
+        }
+        return photo;
     }
 
     private ListingPhoto pendingPhoto()

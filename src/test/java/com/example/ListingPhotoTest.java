@@ -28,14 +28,17 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -66,7 +69,7 @@ class ListingPhotoTest extends IntegrationTest {
                 .andExpect(jsonPath("$.headers['Content-Type']").value("image/jpeg"))
                 .andReturn().getResponse().getContentAsString().transform(objectMapper::readTree);
 
-        assertThat(put(upload, file, "image/jpeg").statusCode()).isEqualTo(200);
+        assertThat(putToStorage(upload, file, "image/jpeg").statusCode()).isEqualTo(200);
 
         ListingPhoto photo = photoRepository.findById(upload.get("photoId").asLong()).orElseThrow();
         assertThat(photo.getObjectKey()).startsWith("listings/" + listingId + "/");
@@ -87,7 +90,7 @@ class ListingPhotoTest extends IntegrationTest {
         Long listingId = insertListing(seller, uniqueBrand(), ListingStatus.ACTIVE);
         byte[] file = jpeg(3000);
         JsonNode upload = json(startUpload(listingId, seller, "image/jpeg", file.length));
-        put(upload, file, "image/jpeg");
+        putToStorage(upload, file, "image/jpeg");
         long photoId = upload.get("photoId").asLong();
 
         assertThat(json(mockMvc.perform(get("/api/listings/{id}/photos", listingId))).isEmpty()).isTrue();
@@ -126,7 +129,7 @@ class ListingPhotoTest extends IntegrationTest {
         Long listingId = insertListing(seller, uniqueBrand(), ListingStatus.DRAFT);
         byte[] pdf = "%PDF-1.7 not a photo".getBytes();
         JsonNode upload = json(startUpload(listingId, seller, "image/jpeg", pdf.length));
-        assertThat(put(upload, pdf, "image/jpeg").statusCode()).isEqualTo(200);
+        assertThat(putToStorage(upload, pdf, "image/jpeg").statusCode()).isEqualTo(200);
         long photoId = upload.get("photoId").asLong();
         String key = photoRepository.findById(photoId).orElseThrow().getObjectKey();
 
@@ -135,10 +138,7 @@ class ListingPhotoTest extends IntegrationTest {
                 .andExpect(jsonPath("$.message").value("Файл не image/jpeg, фото удалено. Загрузите заново"));
 
         assertThat(photoRepository.findById(photoId)).isEmpty();
-        try (S3Client client = testS3Client())
-        {
-            assertThatThrownBy(() -> client.headObject(request -> request.bucket(BUCKET).key(key))).isInstanceOf(NoSuchKeyException.class);
-        }
+        assertFileIsGone(key);
     }
 
     // Фото черновика видит только продавец. Чужой photoId под своим объявлением не находится
@@ -159,6 +159,78 @@ class ListingPhotoTest extends IntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
+    // Удалили второе из трёх: третье встало на его место, файл ушёл из хранилища после коммита
+    @Test
+    void deletingPhotoClosesGapAndRemovesFile() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        Long listingId = insertListing(seller, uniqueBrand(), ListingStatus.ACTIVE);
+        long first = uploadedPhoto(listingId, seller);
+        long second = uploadedPhoto(listingId, seller);
+        long third = uploadedPhoto(listingId, seller);
+        String secondKey = photoRepository.findById(second).orElseThrow().getObjectKey();
+
+        mockMvc.perform(delete("/api/listings/{id}/photos/{photoId}", listingId, second).header("Authorization", bearer(seller)))
+                .andExpect(status().isNoContent());
+
+        JsonNode photos = json(mockMvc.perform(get("/api/listings/{id}/photos", listingId)));
+        assertThat(photos.valueStream().map(photo -> photo.get("id").asLong()).toList()).containsExactly(first, third);
+        assertThat(photos.valueStream().map(photo -> photo.get("position").asInt()).toList()).containsExactly(1, 2);
+        assertFileIsGone(secondKey);
+    }
+
+    // Обмен местами: на полпути у двух фото одно место. Проходит только с отложенной уникальностью
+    @Test
+    void photosSwapPlaces() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        Long listingId = insertListing(seller, uniqueBrand(), ListingStatus.DRAFT);
+        long first = uploadedPhoto(listingId, seller);
+        long second = uploadedPhoto(listingId, seller);
+
+        mockMvc.perform(put("/api/listings/{id}/photos/order", listingId)
+                        .header("Authorization", bearer(seller))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("photoIds", List.of(second, first)))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(second))
+                .andExpect(jsonPath("$[0].position").value(1));
+
+        assertThat(photoRepository.findById(first).orElseThrow().getPosition()).isEqualTo(2);
+        assertThat(photoRepository.findById(second).orElseThrow().getPosition()).isEqualTo(1);
+    }
+
+    @Test
+    void orderWithoutEveryPhotoIs400() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        Long listingId = insertListing(seller, uniqueBrand(), ListingStatus.DRAFT);
+        long first = uploadedPhoto(listingId, seller);
+        uploadedPhoto(listingId, seller);
+
+        mockMvc.perform(put("/api/listings/{id}/photos/order", listingId)
+                        .header("Authorization", bearer(seller))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("photoIds", List.of(first)))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Нужен порядок всех фото объявления, каждое по одному разу"));
+    }
+
+    // Строки фото база удаляет каскадом вместе с черновиком, файлы — слушатель после коммита
+    @Test
+    void deletingDraftRemovesItsFiles() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        Long listingId = insertListing(seller, uniqueBrand(), ListingStatus.DRAFT);
+        String key = photoRepository.findById(uploadedPhoto(listingId, seller)).orElseThrow().getObjectKey();
+
+        mockMvc.perform(delete("/api/listings/{id}", listingId).header("Authorization", bearer(seller)))
+                .andExpect(status().isNoContent());
+
+        assertThat(photoRepository.findObjectKeys(listingId)).isEmpty();
+        assertFileIsGone(key);
+    }
+
     // Тип и размер вошли в подпись: подменить файл после выдачи ссылки нельзя
     @Test
     void storageRejectsOtherSizeOrType() throws Exception
@@ -168,8 +240,8 @@ class ListingPhotoTest extends IntegrationTest {
         JsonNode upload = startUpload(listingId, seller, "image/jpeg", 1000)
                 .andReturn().getResponse().getContentAsString().transform(objectMapper::readTree);
 
-        assertThat(put(upload, jpeg(5000), "image/jpeg").statusCode()).isEqualTo(403);
-        assertThat(put(upload, jpeg(1000), "image/png").statusCode()).isEqualTo(403);
+        assertThat(putToStorage(upload, jpeg(5000), "image/jpeg").statusCode()).isEqualTo(403);
+        assertThat(putToStorage(upload, jpeg(1000), "image/png").statusCode()).isEqualTo(403);
     }
 
     @Test
@@ -254,12 +326,32 @@ class ListingPhotoTest extends IntegrationTest {
                 .content(objectMapper.writeValueAsString(Map.of("contentType", contentType, "sizeBytes", size))));
     }
 
+    // Полный путь фото: ссылка, PUT в хранилище, подтверждение
+    private long uploadedPhoto(Long listingId, AppUser seller) throws Exception
+    {
+        byte[] file = jpeg(1500);
+        JsonNode upload = json(startUpload(listingId, seller, "image/jpeg", file.length));
+        assertThat(putToStorage(upload, file, "image/jpeg").statusCode()).isEqualTo(200);
+        long photoId = upload.get("photoId").asLong();
+        mockMvc.perform(post("/api/listings/{id}/photos/{photoId}/confirm", listingId, photoId).header("Authorization", bearer(seller)))
+                .andExpect(status().isOk());
+        return photoId;
+    }
+
+    private void assertFileIsGone(String key)
+    {
+        try (S3Client client = testS3Client())
+        {
+            assertThatThrownBy(() -> client.headObject(request -> request.bucket(BUCKET).key(key))).isInstanceOf(NoSuchKeyException.class);
+        }
+    }
+
     private JsonNode json(ResultActions result) throws Exception
     {
         return objectMapper.readTree(result.andReturn().getResponse().getContentAsString());
     }
 
-    private HttpResponse<String> put(JsonNode upload, byte[] body, String contentType) throws Exception
+    private HttpResponse<String> putToStorage(JsonNode upload, byte[] body, String contentType) throws Exception
     {
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(upload.get("uploadUrl").asString()))
                 .PUT(HttpRequest.BodyPublishers.ofByteArray(body));

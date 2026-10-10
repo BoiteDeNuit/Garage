@@ -18,9 +18,11 @@ import com.example.model.Listing;
 import com.example.model.ListingAction;
 import com.example.model.ListingStatus;
 import com.example.repository.AppUserRepository;
+import com.example.repository.ListingPhotoRepository;
 import com.example.repository.ListingRepository;
 import com.example.repository.ListingSpecifications;
 import com.example.security.AppUserPrincipal;
+import com.example.storage.PhotoFilesRemoved;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.jspecify.annotations.Nullable;
@@ -47,6 +49,7 @@ public class ListingService {
     private final AppUserRepository users;
     private final ListingReader reader;
     private final ListingLoader loader;
+    private final ListingPhotoRepository photos;
     private final ListingAccessPolicy policy;
     private final CarModelCatalog catalog;
     private final CurrencyClient currencyClient;
@@ -57,6 +60,7 @@ public class ListingService {
                           AppUserRepository users,
                           ListingReader reader,
                           ListingLoader loader,
+                          ListingPhotoRepository photos,
                           ListingAccessPolicy policy,
                           CarModelCatalog catalog,
                           CurrencyClient currencyClient,
@@ -68,6 +72,7 @@ public class ListingService {
         this.users=users;
         this.reader=reader;
         this.loader=loader;
+        this.photos=photos;
         this.policy=policy;
         this.catalog=catalog;
         this.currencyClient=currencyClient;
@@ -151,6 +156,8 @@ public class ListingService {
     {
         Listing listing = loader.forChange(id, actor, ListingAction.DELETE);
         listing.checkDeletable();
+        // Строки фото база удалит каскадом, а файлы — PhotoFilesCleaner после коммита
+        events.publishEvent(new PhotoFilesRemoved(photos.findObjectKeys(id)));
         repository.delete(listing);
     }
     // Статус в фильтре всегда: какие бы параметры ни пришли, в ленту попадают только опубликованные.

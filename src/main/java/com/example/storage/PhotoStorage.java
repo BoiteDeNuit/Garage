@@ -2,8 +2,10 @@ package com.example.storage;
 
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectsResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
@@ -71,6 +73,15 @@ public class PhotoStorage {
     public void delete(String key)
     {
         client.deleteObject(request -> request.bucket(properties.bucket()).key(key));
+    }
+    // Один запрос DeleteObjects на все ключи (до 1000). Возвращает, сколько хранилище удалить не смогло
+    public int deleteAll(List<String> keys)
+    {
+        List<ObjectIdentifier> objects = keys.stream().map(key -> ObjectIdentifier.builder().key(key).build()).toList();
+        DeleteObjectsResponse response = client.deleteObjects(request -> request
+                .bucket(properties.bucket())
+                .delete(delete -> delete.objects(objects).quiet(true)));
+        return response.errors().size();
     }
     // SDK отдаёт имена в нижнем регистре (content-type), клиенту привычнее Content-Type: регистр имён HTTP не важен.
     // host клиент выставит сам по адресу ссылки, передавать его не нужно

@@ -46,6 +46,11 @@ public class ListingPhoto {
         this.status=PhotoStatus.READY;
     }
 
+    public void moveTo(int position)
+    {
+        this.position=position;
+    }
+
     public Long getId()
     {
         return id;

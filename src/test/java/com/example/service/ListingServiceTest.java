@@ -19,8 +19,10 @@ import com.example.model.ListingDetails;
 import com.example.model.ListingStatus;
 import com.example.model.Role;
 import com.example.repository.AppUserRepository;
+import com.example.repository.ListingPhotoRepository;
 import com.example.repository.ListingRepository;
 import com.example.security.AppUserPrincipal;
+import com.example.storage.PhotoFilesRemoved;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,6 +66,8 @@ class ListingServiceTest {
     @Mock
     private CarModelCatalog catalog;
     @Mock
+    private ListingPhotoRepository photos;
+    @Mock
     private CurrencyClient currencyClient;
     @Mock
     private ApplicationEventPublisher events;
@@ -75,7 +79,7 @@ class ListingServiceTest {
     void setUp()
     {
         ListingAccessPolicy policy = new ListingAccessPolicy();
-        service = new ListingService(repository, users, reader, new ListingLoader(repository, policy), policy, catalog, currencyClient, events, registry, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new ListingService(repository, users, reader, new ListingLoader(repository, policy), photos, policy, catalog, currencyClient, events, registry, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -368,10 +372,13 @@ class ListingServiceTest {
     {
         Listing draft = listing();
         when(repository.findById(1L)).thenReturn(Optional.of(draft));
+        when(photos.findObjectKeys(1L)).thenReturn(List.of("listings/1/a", "listings/1/b"));
 
         service.delete(1L, principal(7L, Role.USER));
 
         verify(repository).delete(draft);
+        // Файлы фото удалит слушатель после коммита, строки база удалит каскадом
+        verify(events).publishEvent(new PhotoFilesRemoved(List.of("listings/1/a", "listings/1/b")));
     }
 
     @Test

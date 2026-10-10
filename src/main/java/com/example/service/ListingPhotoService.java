@@ -14,11 +14,13 @@ import com.example.model.ListingPhoto;
 import com.example.model.PhotoStatus;
 import com.example.repository.ListingPhotoRepository;
 import com.example.security.AppUserPrincipal;
+import com.example.storage.PhotoFilesRemoved;
 import com.example.storage.PhotoSignature;
 import com.example.storage.PhotoStorage;
 import com.example.storage.PresignedUpload;
 import com.example.storage.StoredObject;
 import org.jspecify.annotations.Nullable;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,8 +28,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class ListingPhotoService {
@@ -39,6 +44,7 @@ public class ListingPhotoService {
     private final ListingPhotoRepository photos;
     private final PhotoStorage storage;
     private final TransactionTemplate transactions;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
     public ListingPhotoService(ListingLoader loader,
                                ListingReader reader,
@@ -46,6 +52,7 @@ public class ListingPhotoService {
                                ListingPhotoRepository photos,
                                PhotoStorage storage,
                                PlatformTransactionManager transactionManager,
+                               ApplicationEventPublisher events,
                                Clock clock)
     {
         this.loader=loader;
@@ -54,6 +61,7 @@ public class ListingPhotoService {
         this.photos=photos;
         this.storage=storage;
         this.transactions=new TransactionTemplate(transactionManager);
+        this.events=events;
         this.clock=clock;
     }
     // Ссылка на загрузку одного фото. Права те же, что на правку: только продавец, проданное — 409.
@@ -112,6 +120,37 @@ public class ListingPhotoService {
             throw EntityNotFoundException.listing(listingId);
         }
         return photos.findByListingIdAndStatusOrderByPosition(listingId, PhotoStatus.READY).stream()
+                .map(this::toDto)
+                .toList();
+    }
+    // Строка и сдвиг остальных фото — в транзакции, файл из хранилища — после коммита (PhotoFilesCleaner)
+    @Transactional
+    public void delete(Long listingId, Long photoId, AppUserPrincipal actor)
+    {
+        ListingPhoto photo = photoForChange(listingId, photoId, actor);
+        photos.delete(photo);
+        photos.closeGap(listingId, photo.getPosition());
+        events.publishEvent(new PhotoFilesRemoved(List.of(photo.getObjectKey())));
+    }
+    // Новый порядок — список всех фото объявления, включая неподтверждённые: места у них общие.
+    // Обмен местами проходит потому, что уникальность места проверяется при коммите (V15)
+    @Transactional
+    public List<PhotoDto> reorder(Long listingId, List<Long> photoIds, AppUserPrincipal actor)
+    {
+        loader.forChange(listingId, actor, ListingAction.EDIT).checkEditable();
+        List<ListingPhoto> all = photos.findByListingIdOrderByPosition(listingId);
+        Map<Long, ListingPhoto> byId = all.stream().collect(Collectors.toMap(ListingPhoto::getId, photo -> photo));
+        if(photoIds.size() != all.size() || new HashSet<>(photoIds).size() != photoIds.size() || !byId.keySet().containsAll(photoIds))
+        {
+            throw new InvalidRequestException("Нужен порядок всех фото объявления, каждое по одному разу");
+        }
+        for(int i = 0; i < photoIds.size(); i++)
+        {
+            byId.get(photoIds.get(i)).moveTo(i + 1);
+        }
+        return photoIds.stream()
+                .map(byId::get)
+                .filter(photo -> photo.getStatus() == PhotoStatus.READY)
                 .map(this::toDto)
                 .toList();
     }

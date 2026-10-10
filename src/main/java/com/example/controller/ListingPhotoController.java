@@ -1,6 +1,7 @@
 package com.example.controller;
 
 import com.example.dto.PhotoDto;
+import com.example.dto.PhotoOrderRequest;
 import com.example.dto.PhotoUploadDto;
 import com.example.dto.PhotoUploadRequest;
 import com.example.security.AppUserPrincipal;
@@ -14,9 +15,11 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -66,5 +69,29 @@ public class ListingPhotoController {
                                @Parameter(hidden = true) @AuthenticationPrincipal AppUserPrincipal viewer)
     {
         return photos.readyPhotos(id, viewer);
+    }
+    @Operation(summary = "Удалить фото", description = "Остальные сдвигаются вверх. Файл удаляется из хранилища после коммита")
+    @ApiResponse(responseCode = "204", description = "Удалено")
+    @ApiResponse(responseCode = "404", description = "Нет объявления или такого фото у него")
+    @ApiResponse(responseCode = "409", description = "Объявление продано")
+    @DeleteMapping("/{photoId}")
+    public ResponseEntity<Void> delete(@PathVariable Long id,
+                                       @PathVariable Long photoId,
+                                       @Parameter(hidden = true) @AuthenticationPrincipal AppUserPrincipal actor)
+    {
+        photos.delete(id, photoId, actor);
+        return ResponseEntity.noContent().build();
+    }
+    @Operation(summary = "Переставить фото", description = "id всех фото объявления в новом порядке, первое станет обложкой. "
+            + "В ответе подтверждённые фото в новом порядке")
+    @ApiResponse(responseCode = "200", description = "OK")
+    @ApiResponse(responseCode = "400", description = "В списке не все фото объявления, лишние или повторы")
+    @ApiResponse(responseCode = "409", description = "Объявление продано")
+    @PutMapping("/order")
+    public List<PhotoDto> reorder(@PathVariable Long id,
+                                  @Valid @RequestBody PhotoOrderRequest request,
+                                  @Parameter(hidden = true) @AuthenticationPrincipal AppUserPrincipal actor)
+    {
+        return photos.reorder(id, request.photoIds(), actor);
     }
 }
