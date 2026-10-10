@@ -6,5 +6,6 @@ public enum ListingAction {
     PUBLISH,
     MARK_SOLD,
     ARCHIVE,
-    DELETE
+    DELETE,
+    MODERATE
 }

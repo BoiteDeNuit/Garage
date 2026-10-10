@@ -1,5 +1,6 @@
 package com.example.service;
 
+import com.example.dto.ListingDto;
 import com.example.dto.StatusChangeDto;
 import com.example.exception.EntityNotFoundException;
 import com.example.model.Listing;
@@ -35,11 +36,13 @@ public class ListingHistory {
     {
         changes.save(new ListingStatusChange(listing.getId(), from, listing.getStatus(), actorId, reason, Instant.now(clock)));
     }
-    // Журнал видят продавец и админ: там id модераторов и причины отказов. Остальным — 404, как скрытое объявление
+    // Журнал видят продавец, админ и модератор, пока объявление на проверке или отклонено.
+    // Остальным — 404, как скрытое объявление
     @Transactional(readOnly = true)
     public List<StatusChangeDto> of(Long listingId, @Nullable AppUserPrincipal viewer)
     {
-        if(!policy.canSeeHistory(reader.findCard(listingId).sellerId(), viewer))
+        ListingDto card = reader.findCard(listingId);
+        if(!policy.canSeeHistory(card.status(), card.sellerId(), viewer))
         {
             throw EntityNotFoundException.listing(listingId);
         }

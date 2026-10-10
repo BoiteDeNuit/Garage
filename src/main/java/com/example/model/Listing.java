@@ -48,6 +48,10 @@ public class Listing {
     private Instant submittedAt;
     @Column(length = 500)
     private String rejectionReason;
+    // Кто из модераторов взял объявление в работу. Пишет их только условный UPDATE (ListingRepository.claim)
+    @Column(name = "moderator_id")
+    private Long moderatorId;
+    private Instant claimedAt;
     @Version
     private Long version;
     protected Listing() {}
@@ -103,6 +107,7 @@ public class Listing {
         this.status=ListingStatus.ACTIVE;
         this.publishedAt=now;
         this.updatedAt=now;
+        releaseClaim();
     }
     // Причину видит продавец: исправит и отправит снова
     public void reject(String reason, Instant now)
@@ -114,6 +119,16 @@ public class Listing {
         this.status=ListingStatus.REJECTED;
         this.rejectionReason=reason;
         this.updatedAt=now;
+        releaseClaim();
+    }
+    public boolean isClaimedBy(Long moderator)
+    {
+        return moderator.equals(moderatorId);
+    }
+    private void releaseClaim()
+    {
+        this.moderatorId=null;
+        this.claimedAt=null;
     }
     public void markSold(Instant now)
     {
@@ -151,10 +166,13 @@ public class Listing {
             throw ListingStateException.underReview();
         }
     }
-    // Удаляется только то, чего никто, кроме продавца, не видел. Опубликованное снимают в архив, история остаётся
+    // Удаляется только то, чего никто, кроме продавца и модератора, не видел: черновик, ждущее проверки
+    // и отклонённое, если их ни разу не публиковали. Опубликованное снимают в архив, история остаётся
     public void checkDeletable()
     {
-        if(status != ListingStatus.DRAFT)
+        boolean neverShown = publishedAt == null
+                && (status == ListingStatus.DRAFT || status == ListingStatus.PENDING_REVIEW || status == ListingStatus.REJECTED);
+        if(!neverShown)
         {
             throw ListingStateException.notDraft();
         }
@@ -252,6 +270,16 @@ public class Listing {
     public String getRejectionReason()
     {
         return rejectionReason;
+    }
+
+    public Long getModeratorId()
+    {
+        return moderatorId;
+    }
+
+    public Instant getClaimedAt()
+    {
+        return claimedAt;
     }
 
     public Instant getCreatedAt() {

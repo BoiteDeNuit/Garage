@@ -431,7 +431,7 @@ class ListingServiceTest {
 
         assertThatThrownBy(() -> service.delete(1L, principal(7L, Role.USER)))
                 .isInstanceOf(ListingStateException.class)
-                .hasMessage("Удалить можно только черновик. Опубликованное объявление снимите в архив");
+                .hasMessage("Удалить можно только то, что ещё не публиковалось. Опубликованное объявление снимите в архив");
         verify(repository, never()).delete(any(Listing.class));
     }
 

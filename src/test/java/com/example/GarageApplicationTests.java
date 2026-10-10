@@ -637,7 +637,7 @@ class GarageApplicationTests extends IntegrationTest {
         mockMvc.perform(delete("/api/listings/" + active).header("Authorization", bearer(stranger))).andExpect(status().isForbidden());
         mockMvc.perform(delete("/api/listings/" + active).header("Authorization", bearer(seller)))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.message").value("Удалить можно только черновик. Опубликованное объявление снимите в архив"));
+                .andExpect(jsonPath("$.message").value("Удалить можно только то, что ещё не публиковалось. Опубликованное объявление снимите в архив"));
         mockMvc.perform(get("/api/listings/" + active)).andExpect(status().isOk());
     }
 

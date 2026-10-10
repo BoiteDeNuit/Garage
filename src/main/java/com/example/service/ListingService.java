@@ -146,14 +146,13 @@ public class ListingService {
         Listing listing = loader.forChange(id, actor, ListingAction.PUBLISH);
         ListingStatus from = listing.getStatus();
         listing.publish(Instant.now(clock), moderation.required());
-        history.record(listing, from, actor.getId(), null);
         // С модерацией в ленту, подсказки и Kafka объявление попадёт после одобрения, не сейчас
         if(listing.getStatus() == ListingStatus.ACTIVE)
         {
             catalog.remember(listing.getBrand(), listing.getModel());
             events.publishEvent(ListingPublishedEvent.from(listing));
         }
-        return toDtoWithNewVersion(listing);
+        return toDtoWithHistory(listing, from, actor);
     }
     @Transactional
     @CacheEvict(cacheNames = "listings", key = "#id")
@@ -162,8 +161,7 @@ public class ListingService {
         Listing listing = loader.forChange(id, actor, ListingAction.MARK_SOLD);
         ListingStatus from = listing.getStatus();
         listing.markSold(Instant.now(clock));
-        history.record(listing, from, actor.getId(), null);
-        return toDtoWithNewVersion(listing);
+        return toDtoWithHistory(listing, from, actor);
     }
     @Transactional
     @CacheEvict(cacheNames = "listings", key = "#id")
@@ -172,8 +170,7 @@ public class ListingService {
         Listing listing = loader.forChange(id, actor, ListingAction.ARCHIVE);
         ListingStatus from = listing.getStatus();
         listing.archive(Instant.now(clock));
-        history.record(listing, from, actor.getId(), null);
-        return toDtoWithNewVersion(listing);
+        return toDtoWithHistory(listing, from, actor);
     }
     @Transactional
     @CacheEvict(cacheNames = "listings", key = "#id")
@@ -257,5 +254,13 @@ public class ListingService {
     private ListingDto toDtoWithNewVersion(Listing listing)
     {
         return ListingMapper.toDto(repository.saveAndFlush(listing));
+    }
+    // Сначала flush: проверка версии отсеет гонку (объявление удалили или изменили — 409), и только потом журнал.
+    // В обратном порядке вставка в журнал упала бы на внешнем ключе удалённого объявления — 500
+    private ListingDto toDtoWithHistory(Listing listing, ListingStatus from, AppUserPrincipal actor)
+    {
+        ListingDto dto = toDtoWithNewVersion(listing);
+        history.record(listing, from, actor.getId(), null);
+        return dto;
     }
 }

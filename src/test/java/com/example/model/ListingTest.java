@@ -109,6 +109,28 @@ class ListingTest {
         assertThat(active.getPublishedAt()).isEqualTo(NOW);
     }
 
+    // Удаляется то, что никто, кроме продавца и модератора, не видел. Снятое в архив и отправленное заново —
+    // уже публиковалось, его только в архив
+    @Test
+    void neverPublishedListingCanBeDeleted()
+    {
+        Listing pending = draft(new BigDecimal("4500000"), "Самара");
+        pending.publish(NOW, true);
+        Listing rejected = draft(new BigDecimal("4500000"), "Самара");
+        rejected.publish(NOW, true);
+        rejected.reject("Нет фото", NOW);
+        Listing republished = draft(new BigDecimal("4500000"), "Самара");
+        republished.publish(NOW, false);
+        republished.archive(NOW);
+        republished.publish(LATER, true);
+
+        pending.checkDeletable();
+        rejected.checkDeletable();
+        assertThatThrownBy(republished::checkDeletable)
+                .isInstanceOf(ListingStateException.class)
+                .hasMessage("Удалить можно только то, что ещё не публиковалось. Опубликованное объявление снимите в архив");
+    }
+
     @Test
     void publishWithoutPriceIsRejectedAndNothingChanges()
     {
@@ -278,7 +300,7 @@ class ListingTest {
         Listing listing = published();
         assertThatThrownBy(listing::checkDeletable)
                 .isInstanceOf(ListingStateException.class)
-                .hasMessage("Удалить можно только черновик. Опубликованное объявление снимите в архив");
+                .hasMessage("Удалить можно только то, что ещё не публиковалось. Опубликованное объявление снимите в архив");
         listing.archive(LATER);
         assertThatThrownBy(listing::checkDeletable).isInstanceOf(ListingStateException.class);
     }

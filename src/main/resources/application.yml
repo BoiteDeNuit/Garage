@@ -80,6 +80,8 @@ rate-limit:
 # true — публикация идёт через проверку модератором (PENDING_REVIEW), false — сразу в ленту
 moderation:
   required: ${MODERATION_REQUIRED:false}
+  # Через сколько брошенное модератором объявление можно забрать другому
+  claim-ttl: 30m
 # S3-совместимое хранилище фото. Локально LocalStack из compose, в работе AWS S3 или любое совместимое.
 # endpoint — адрес для приложения, public-endpoint — для ссылок, которые уходят клиенту
 storage:

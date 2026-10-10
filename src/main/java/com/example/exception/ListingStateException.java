@@ -34,7 +34,7 @@ public class ListingStateException extends RuntimeException {
     }
     public static ListingStateException notDraft()
     {
-        return new ListingStateException("Удалить можно только черновик. Опубликованное объявление снимите в архив");
+        return new ListingStateException("Удалить можно только то, что ещё не публиковалось. Опубликованное объявление снимите в архив");
     }
     public static ListingStateException underReview()
     {
@@ -43,6 +43,14 @@ public class ListingStateException extends RuntimeException {
     public static ListingStateException notUnderReview()
     {
         return new ListingStateException("Объявление не ждёт модерации");
+    }
+    public static ListingStateException claimedByOther()
+    {
+        return new ListingStateException("Объявление уже проверяет другой модератор");
+    }
+    public static ListingStateException notClaimed()
+    {
+        return new ListingStateException("Сначала возьмите объявление в работу");
     }
     public static ListingStateException tooManyPhotos(int max)
     {

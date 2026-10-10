@@ -40,7 +40,12 @@ class ListingAccessPolicyTest {
             "REJECTED, ANONYMOUS, false",
             "REJECTED, SELLER, true",
             "REJECTED, STRANGER, false",
-            "REJECTED, ADMIN, true"
+            "REJECTED, ADMIN, true",
+            "PENDING_REVIEW, MODERATOR, true",
+            "REJECTED, MODERATOR, true",
+            "DRAFT, MODERATOR, false",
+            "ARCHIVED, MODERATOR, false",
+            "ACTIVE, MODERATOR, true"
     })
     void visibility(ListingStatus status, String viewer, boolean visible)
     {
@@ -63,7 +68,13 @@ class ListingAccessPolicyTest {
             "ADMIN, PUBLISH, false",
             "ADMIN, MARK_SOLD, false",
             "ADMIN, ARCHIVE, true",
-            "ADMIN, DELETE, false"
+            "ADMIN, DELETE, false",
+            "ADMIN, MODERATE, true",
+            "MODERATOR, MODERATE, true",
+            "MODERATOR, EDIT, false",
+            "MODERATOR, ARCHIVE, false",
+            "SELLER, MODERATE, false",
+            "STRANGER, MODERATE, false"
     })
     void actions(String actor, ListingAction action, boolean allowed)
     {
@@ -71,6 +82,15 @@ class ListingAccessPolicyTest {
     }
 
     // Админ, который сам продаёт машину, — обычный продавец своего объявления
+    // Модератор, который сам продаёт, своё объявление не проверяет
+    @Test
+    void moderatorCannotModerateOwnListing()
+    {
+        AppUserPrincipal moderatorSeller = new AppUserPrincipal(SELLER, "moder", "!", Role.MODERATOR);
+
+        assertThat(policy.canPerform(ListingAction.MODERATE, SELLER, moderatorSeller)).isFalse();
+    }
+
     @Test
     void adminWhoIsSellerCanEdit()
     {
@@ -80,12 +100,27 @@ class ListingAccessPolicyTest {
         assertThat(policy.canPerform(ListingAction.DELETE, SELLER, adminSeller)).isTrue();
     }
 
-    // В журнале id модераторов и причины отказов: только продавцу и админу, даже у опубликованного
-    @ParameterizedTest(name = "{0} видит журнал: {1}")
-    @CsvSource({"SELLER, true", "ADMIN, true", "STRANGER, false", "ANONYMOUS, false"})
-    void historyIsForSellerAndAdmin(String viewer, boolean visible)
+    // В журнале id модераторов и причины отказов: продавцу и админу всегда, модератору — пока объявление на проверке
+    // или отклонено. Чужой черновик и архив модератору не нужны
+    @ParameterizedTest(name = "{1} видит журнал {0}: {2}")
+    @CsvSource({
+            "ACTIVE, SELLER, true",
+            "ACTIVE, ADMIN, true",
+            "ACTIVE, STRANGER, false",
+            "ACTIVE, ANONYMOUS, false",
+            "DRAFT, SELLER, true",
+            "DRAFT, ADMIN, true",
+            "DRAFT, MODERATOR, false",
+            "ARCHIVED, MODERATOR, false",
+            "ACTIVE, MODERATOR, false",
+            "SOLD, MODERATOR, false",
+            "PENDING_REVIEW, MODERATOR, true",
+            "REJECTED, MODERATOR, true",
+            "PENDING_REVIEW, STRANGER, false"
+    })
+    void historyIsForSellerAdminAndModeratorUnderReview(ListingStatus status, String viewer, boolean visible)
     {
-        assertThat(policy.canSeeHistory(SELLER, actor(viewer))).isEqualTo(visible);
+        assertThat(policy.canSeeHistory(status, SELLER, actor(viewer))).isEqualTo(visible);
     }
 
     @Test
@@ -101,6 +136,7 @@ class ListingAccessPolicyTest {
             case "SELLER" -> new AppUserPrincipal(Long.valueOf(1000), "seller", "!", Role.USER);
             case "STRANGER" -> new AppUserPrincipal(Long.valueOf(1001), "stranger", "!", Role.USER);
             case "ADMIN" -> new AppUserPrincipal(Long.valueOf(1), "boss", "!", Role.ADMIN);
+            case "MODERATOR" -> new AppUserPrincipal(Long.valueOf(2), "moder", "!", Role.MODERATOR);
             default -> null;
         };
     }
