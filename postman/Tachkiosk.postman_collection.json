@@ -72,6 +72,14 @@
     {
       "key": "feedFirstId",
       "value": ""
+    },
+    {
+      "key": "photoUploadUrl",
+      "value": ""
+    },
+    {
+      "key": "photoId",
+      "value": ""
     }
   ],
   "item": [
@@ -816,6 +824,184 @@
                 "{{listingId}}",
                 "publish"
               ]
+            }
+          }
+        },
+        {
+          "name": "Ссылка на загрузку фото",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"201\", () => pm.response.to.have.status(201));",
+                  "const upload = pm.response.json();",
+                  "pm.test(\"ссылка на PUT\", () => pm.expect(upload.method).to.eql(\"PUT\"));",
+                  "pm.test(\"тип в подписанных заголовках\", () => pm.expect(upload.headers[\"Content-Type\"]).to.eql(\"image/webp\"));",
+                  "pm.collectionVariables.set(\"photoUploadUrl\", upload.uploadUrl);",
+                  "pm.collectionVariables.set(\"photoId\", upload.photoId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sellerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/listings/{{listingId}}/photos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listings",
+                "{{listingId}}",
+                "photos"
+              ]
+            },
+            "description": "Тип и размер заявляются заранее и входят в подпись ссылки",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contentType\": \"image/webp\",\n  \"sizeBytes\": 16\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Файл прямо в хранилище",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "image/webp"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "RIFF0000WEBPVP8 "
+            },
+            "url": "{{photoUploadUrl}}",
+            "description": "16 байт, как заявлено. Приложение в загрузке не участвует"
+          }
+        },
+        {
+          "name": "Файл другого размера — 403 от хранилища",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "image/webp"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "RIFF0000WEBPVP8 extra"
+            },
+            "url": "{{photoUploadUrl}}",
+            "description": "Размер вошёл в подпись: подменить файл после выдачи ссылки нельзя"
+          }
+        },
+        {
+          "name": "Фото к чужому объявлению — 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{buyerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/listings/{{listingId}}/photos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listings",
+                "{{listingId}}",
+                "photos"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contentType\": \"image/jpeg\",\n  \"sizeBytes\": 1000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         }

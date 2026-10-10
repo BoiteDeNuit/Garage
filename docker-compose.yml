@@ -15,9 +15,14 @@ services:
       CURRENCY_API_URL: ${CURRENCY_API_URL}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_DATA_REDIS_HOST: redis
+      # Приложение ходит в хранилище по имени сервиса, а ссылки для клиента подписывает под localhost
+      STORAGE_ENDPOINT: http://s3:4566
+      STORAGE_PUBLIC_ENDPOINT: http://localhost:4566
     mem_limit: 768m
     depends_on:
       db:
+        condition: service_healthy
+      s3:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -95,6 +100,26 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
+  # S3 для фото. MinIO больше не публикует образы в Docker Hub, поэтому LocalStack: тот же API S3,
+  # приложению всё равно, куда ходить. S3_SKIP_SIGNATURE_VALIDATION=0 — проверять подпись ссылок, как настоящий S3.
+  # Бесплатный LocalStack хранит файлы в памяти: после перезапуска контейнера фото пропадут
+  s3:
+    image: localstack/localstack:4.9.2
+    container_name: s3
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: s3
+      S3_SKIP_SIGNATURE_VALIDATION: "0"
+    volumes:
+      - ./localstack/init-s3.sh:/etc/localstack/init/ready.d/init-s3.sh:ro
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s localhost:4566/_localstack/init/ready | grep -q '\"completed\": true'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     restart: unless-stopped
   prometheus:
     image: prom/prometheus:v3.14.0

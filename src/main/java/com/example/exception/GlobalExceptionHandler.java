@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import com.example.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.TypeMismatchException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpHeaders;
@@ -116,6 +117,19 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> concurrentChange(OptimisticLockingFailureException e, HttpServletRequest request)
     {
         return build(HttpStatus.CONFLICT,"Объявление изменили одновременно с вами, обновите и повторите",request);
+    }
+    // Две загрузки фото одновременно заняли одно место: проверка в сервисе пропустила обе, а уникальность
+    // (listing_id, position) остановила вторую. Она отложенная, отказ приходит уже при коммите.
+    // Остальные нарушения ограничений — ошибка у нас, 500 с логом
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> constraintViolation(DataIntegrityViolationException e, HttpServletRequest request)
+    {
+        String reason = e.getMostSpecificCause().getMessage();
+        if(reason != null && (reason.contains("\"uq_listing_photos_position\"") || reason.contains("\"chk_listing_photos_position\"")))
+        {
+            return build(HttpStatus.CONFLICT,"Фото загружают одновременно, повторите",request);
+        }
+        return unexpected(e,request);
     }
     @ExceptionHandler(UsernameTakenException.class)
     public ResponseEntity<ErrorResponse> usernameTaken(UsernameTakenException e, HttpServletRequest request)

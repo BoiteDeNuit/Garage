@@ -90,10 +90,7 @@ public class Listing {
     // Правка описания. Статус и продавец не меняются: для статуса есть свои действия, продавец — это владелец
     public void updateDetails(ListingDetails details, Instant now)
     {
-        if(status == ListingStatus.SOLD)
-        {
-            throw ListingStateException.soldIsFinal();
-        }
+        checkEditable();
         boolean losesPriceOrCity = details.price() == null || details.city() == null || details.city().isBlank();
         if(status == ListingStatus.ACTIVE && losesPriceOrCity)
         {
@@ -101,6 +98,14 @@ public class Listing {
         }
         apply(details);
         this.updatedAt=now;
+    }
+    // Проданное не меняется: ни описание, ни фото
+    public void checkEditable()
+    {
+        if(status == ListingStatus.SOLD)
+        {
+            throw ListingStateException.soldIsFinal();
+        }
     }
     // Удаляется только то, чего никто, кроме продавца, не видел. Опубликованное снимают в архив, история остаётся
     public void checkDeletable()

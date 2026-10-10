@@ -72,5 +72,15 @@ management:
 rate-limit:
   login:
     per-minute: 5
+# S3-совместимое хранилище фото. Локально LocalStack из compose, в работе AWS S3 или любое совместимое.
+# endpoint — адрес для приложения, public-endpoint — для ссылок, которые уходят клиенту
+storage:
+  endpoint: ${STORAGE_ENDPOINT:http://localhost:4566}
+  public-endpoint: ${STORAGE_PUBLIC_ENDPOINT:http://localhost:4566}
+  region: ${STORAGE_REGION:us-east-1}
+  bucket: ${STORAGE_BUCKET:tachkiosk-photos}
+  access-key: ${STORAGE_ACCESS_KEY:test}
+  secret-key: ${STORAGE_SECRET_KEY:test}
+  upload-ttl: 10m
 springdoc:
   default-produces-media-type: application/json

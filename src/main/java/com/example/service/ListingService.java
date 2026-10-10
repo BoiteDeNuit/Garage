@@ -30,7 +30,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,6 +46,7 @@ public class ListingService {
     private final ListingRepository repository;
     private final AppUserRepository users;
     private final ListingReader reader;
+    private final ListingLoader loader;
     private final ListingAccessPolicy policy;
     private final CarModelCatalog catalog;
     private final CurrencyClient currencyClient;
@@ -56,6 +56,7 @@ public class ListingService {
     public ListingService(ListingRepository repository,
                           AppUserRepository users,
                           ListingReader reader,
+                          ListingLoader loader,
                           ListingAccessPolicy policy,
                           CarModelCatalog catalog,
                           CurrencyClient currencyClient,
@@ -66,6 +67,7 @@ public class ListingService {
         this.repository=repository;
         this.users=users;
         this.reader=reader;
+        this.loader=loader;
         this.policy=policy;
         this.catalog=catalog;
         this.currencyClient=currencyClient;
@@ -91,7 +93,7 @@ public class ListingService {
         ListingDto card = reader.findCard(id);
         if(!policy.canView(card.status(), card.sellerId(), viewer))
         {
-            throw notFound(id);
+            throw EntityNotFoundException.listing(id);
         }
         return card;
     }
@@ -104,7 +106,7 @@ public class ListingService {
     @CacheEvict(cacheNames = "listings", key = "#id")
     public ListingDto update(Long id, ListingUpdateRequest request, AppUserPrincipal actor)
     {
-        Listing listing = loadForChange(id, actor, ListingAction.EDIT);
+        Listing listing = loader.forChange(id, actor, ListingAction.EDIT);
         if(!listing.getVersion().equals(request.version()))
         {
             throw ListingStateException.staleVersion(listing.getVersion());
@@ -121,7 +123,7 @@ public class ListingService {
     @CacheEvict(cacheNames = "listings", key = "#id")
     public ListingDto publish(Long id, AppUserPrincipal actor)
     {
-        Listing listing = loadForChange(id, actor, ListingAction.PUBLISH);
+        Listing listing = loader.forChange(id, actor, ListingAction.PUBLISH);
         listing.publish(Instant.now(clock));
         catalog.remember(listing.getBrand(), listing.getModel());
         events.publishEvent(ListingPublishedEvent.from(listing));
@@ -131,7 +133,7 @@ public class ListingService {
     @CacheEvict(cacheNames = "listings", key = "#id")
     public ListingDto markSold(Long id, AppUserPrincipal actor)
     {
-        Listing listing = loadForChange(id, actor, ListingAction.MARK_SOLD);
+        Listing listing = loader.forChange(id, actor, ListingAction.MARK_SOLD);
         listing.markSold(Instant.now(clock));
         return toDtoWithNewVersion(listing);
     }
@@ -139,7 +141,7 @@ public class ListingService {
     @CacheEvict(cacheNames = "listings", key = "#id")
     public ListingDto archive(Long id, AppUserPrincipal actor)
     {
-        Listing listing = loadForChange(id, actor, ListingAction.ARCHIVE);
+        Listing listing = loader.forChange(id, actor, ListingAction.ARCHIVE);
         listing.archive(Instant.now(clock));
         return toDtoWithNewVersion(listing);
     }
@@ -147,7 +149,7 @@ public class ListingService {
     @CacheEvict(cacheNames = "listings", key = "#id")
     public void delete(Long id, AppUserPrincipal actor)
     {
-        Listing listing = loadForChange(id, actor, ListingAction.DELETE);
+        Listing listing = loader.forChange(id, actor, ListingAction.DELETE);
         listing.checkDeletable();
         repository.delete(listing);
     }
@@ -226,7 +228,7 @@ public class ListingService {
     public ListingPriceDto priceIn(Long id,String currency)
     {
         Listing listing = repository.findByIdAndStatusIn(id, policy.publicStatuses())
-                .orElseThrow(() -> notFound(id));
+                .orElseThrow(() -> EntityNotFoundException.listing(id));
         if(listing.getPrice() == null)
         {
             throw new EntityNotFoundException("У объявления с id: " + id + " не указана цена");
@@ -235,27 +237,9 @@ public class ListingService {
         BigDecimal convertedPrice = listing.getPrice().divide(rate,2, RoundingMode.HALF_UP);
         return new ListingPriceDto(listing.getId(),currency.toUpperCase(),rate,convertedPrice);
     }
-    private Listing loadForChange(Long id, AppUserPrincipal actor, ListingAction action)
-    {
-        Listing listing = repository.findById(id).orElseThrow(() -> notFound(id));
-        Long sellerId = listing.getSeller().getId();
-        if(!policy.canView(listing.getStatus(), sellerId, actor))
-        {
-            throw notFound(id);
-        }
-        if(!policy.canPerform(action, sellerId, actor))
-        {
-            throw new AccessDeniedException("Недостаточно прав");
-        }
-        return listing;
-    }
     // Hibernate поднимает version только при flush: без него клиент получил бы старую версию
     private ListingDto toDtoWithNewVersion(Listing listing)
     {
         return ListingMapper.toDto(repository.saveAndFlush(listing));
-    }
-    private EntityNotFoundException notFound(Long id)
-    {
-        return new EntityNotFoundException("Объявление с id: " + id + " не найдено");
     }
 }

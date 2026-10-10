@@ -36,4 +36,8 @@ public class ListingStateException extends RuntimeException {
     {
         return new ListingStateException("Удалить можно только черновик. Опубликованное объявление снимите в архив");
     }
+    public static ListingStateException tooManyPhotos(int max)
+    {
+        return new ListingStateException("Не больше " + max + " фото на объявление");
+    }
 }

@@ -15,9 +15,16 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.GenericContainer;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.kafka.ConfluentKafkaContainer;
+import org.testcontainers.localstack.LocalStackContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
 import tools.jackson.databind.ObjectMapper;
 
 import java.sql.Timestamp;
@@ -43,9 +50,39 @@ public abstract class IntegrationTest {
     static final ConfluentKafkaContainer kafka = new ConfluentKafkaContainer("confluentinc/cp-kafka:8.3.2");
     @ServiceConnection(name = "redis")
     static final GenericContainer<?> redis = new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
+    // S3_SKIP_SIGNATURE_VALIDATION=0: LocalStack по умолчанию подпись presigned-ссылок не проверяет,
+    // а тестам нужно, чтобы файл не того размера или типа получал 403, как в настоящем S3
+    protected static final LocalStackContainer s3 = new LocalStackContainer("localstack/localstack:4.9.2")
+            .withServices("s3")
+            .withEnv("S3_SKIP_SIGNATURE_VALIDATION", "0");
+    protected static final String BUCKET = "tachkiosk-photos";
     static
     {
-        Startables.deepStart(postgres, kafka, redis).join();
+        Startables.deepStart(postgres, kafka, redis, s3).join();
+        // Бакет заводит не приложение, а тот, кто разворачивает хранилище: в compose — скрипт LocalStack
+        try (S3Client client = testS3Client())
+        {
+            client.createBucket(request -> request.bucket(BUCKET));
+        }
+    }
+    @DynamicPropertySource
+    static void storage(DynamicPropertyRegistry registry)
+    {
+        registry.add("storage.endpoint", () -> s3.getEndpoint().toString());
+        registry.add("storage.public-endpoint", () -> s3.getEndpoint().toString());
+        registry.add("storage.region", s3::getRegion);
+        registry.add("storage.access-key", s3::getAccessKey);
+        registry.add("storage.secret-key", s3::getSecretKey);
+        registry.add("storage.bucket", () -> BUCKET);
+    }
+    protected static S3Client testS3Client()
+    {
+        return S3Client.builder()
+                .endpointOverride(s3.getEndpoint())
+                .region(Region.of(s3.getRegion()))
+                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(s3.getAccessKey(), s3.getSecretKey())))
+                .forcePathStyle(true)
+                .build();
     }
     @Autowired
     protected MockMvc mockMvc;

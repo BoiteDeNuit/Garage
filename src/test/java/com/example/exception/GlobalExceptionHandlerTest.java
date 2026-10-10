@@ -3,6 +3,7 @@ package com.example.exception;
 import com.example.dto.ErrorResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.access.AccessDeniedException;
@@ -10,6 +11,8 @@ import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.context.SecurityContextHolder;
+
+import java.sql.SQLException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -21,6 +24,16 @@ class GlobalExceptionHandlerTest {
     void clearContext()
     {
         SecurityContextHolder.clearContext();
+    }
+
+    // 409 только для места фото. Любое другое нарушение ограничения — ошибка у нас
+    @Test
+    void otherConstraintViolationStays500()
+    {
+        DataIntegrityViolationException e = new DataIntegrityViolationException("x",
+                new SQLException("ERROR: duplicate key value violates unique constraint \"listing_photos_object_key_key\""));
+
+        assertThat(handler.constraintViolation(e, request).getStatusCode().value()).isEqualTo(500);
     }
 
     @Test

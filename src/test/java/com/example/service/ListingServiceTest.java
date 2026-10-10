@@ -74,7 +74,8 @@ class ListingServiceTest {
     @BeforeEach
     void setUp()
     {
-        service = new ListingService(repository, users, reader, new ListingAccessPolicy(), catalog, currencyClient, events, registry, Clock.fixed(NOW, ZoneOffset.UTC));
+        ListingAccessPolicy policy = new ListingAccessPolicy();
+        service = new ListingService(repository, users, reader, new ListingLoader(repository, policy), policy, catalog, currencyClient, events, registry, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
