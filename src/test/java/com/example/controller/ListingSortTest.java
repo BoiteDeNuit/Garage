@@ -74,6 +74,15 @@ class ListingSortTest {
     }
 
     @Test
+    void favoritesRejectAnySort()
+    {
+        assertThatThrownBy(() -> ListingSort.forFavorites(PageRequest.of(0, 20, Sort.by("price"))))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessage("Избранное сортируется только по дате добавления");
+        assertThat(ListingSort.forFavorites(PageRequest.of(2, 10)).getSort().isUnsorted()).isTrue();
+    }
+
+    @Test
     void fieldOutsideWhitelistIsRejected()
     {
         assertThatThrownBy(() -> ListingSort.forPublicFeed(PageRequest.of(0, 20, Sort.by("description"))))

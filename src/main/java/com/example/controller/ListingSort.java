@@ -28,6 +28,17 @@ public final class ListingSort {
         checkOffset(pageable);
         return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
     }
+    // Порядок избранного задан в запросе (сначала недавно добавленные). Сортировку от клиента Spring Data
+    // дописал бы к алиасу избранного, а не объявления, поэтому она запрещена
+    public static Pageable forFavorites(Pageable pageable)
+    {
+        if(pageable.getSort().isSorted())
+        {
+            throw new InvalidRequestException("Избранное сортируется только по дате добавления");
+        }
+        checkOffset(pageable);
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+    }
     public static Pageable forOwnerList(Pageable pageable)
     {
         return checked(pageable, Sort.by(Sort.Direction.DESC, "createdAt"));
