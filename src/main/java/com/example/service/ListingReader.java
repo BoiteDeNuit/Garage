@@ -23,6 +23,6 @@ public class ListingReader {
     {
         return repository.findById(id)
                 .map(ListingMapper::toDto)
-                .orElseThrow(() -> new EntityNotFoundException("Объявление с id: " + id + " не найдено"));
+                .orElseThrow(() -> EntityNotFoundException.listing(id));
     }
 }

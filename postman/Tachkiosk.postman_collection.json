@@ -952,6 +952,86 @@
           }
         },
         {
+          "name": "Подтверждение загрузки",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"первое место\", () => pm.expect(pm.response.json().position).to.eql(1));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sellerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/listings/{{listingId}}/photos/{{photoId}}/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listings",
+                "{{listingId}}",
+                "photos",
+                "{{photoId}}",
+                "confirm"
+              ]
+            },
+            "description": "Хранилище сверяет размер, первые байты файла сверяются с типом: RIFF…WEBP — это WebP"
+          }
+        },
+        {
+          "name": "Фото без входа",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));",
+                  "const photos = pm.response.json();",
+                  "pm.test(\"одно фото со ссылкой\", () => { pm.expect(photos).to.have.lengthOf(1); pm.expect(photos[0].url).to.include(\"X-Amz-Signature\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/listings/{{listingId}}/photos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listings",
+                "{{listingId}}",
+                "photos"
+              ]
+            },
+            "description": "Только подтверждённые. Ссылки на чтение временные"
+          }
+        },
+        {
           "name": "Фото к чужому объявлению — 403",
           "event": [
             {

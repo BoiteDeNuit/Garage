@@ -40,6 +40,12 @@ public class ListingPhoto {
         return photo;
     }
 
+    // Файл проверен: лежит в хранилище, размер и сигнатура совпали. Повтор ничего не меняет
+    public void markReady()
+    {
+        this.status=PhotoStatus.READY;
+    }
+
     public Long getId()
     {
         return id;

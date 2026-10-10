@@ -15,5 +15,6 @@ public record StorageProperties(
         String bucket,
         String accessKey,
         String secretKey,
-        Duration uploadTtl) {
+        Duration uploadTtl,
+        Duration downloadTtl) {
 }

@@ -82,5 +82,6 @@ storage:
   access-key: ${STORAGE_ACCESS_KEY:test}
   secret-key: ${STORAGE_SECRET_KEY:test}
   upload-ttl: 10m
+  download-ttl: 1h
 springdoc:
   default-produces-media-type: application/json

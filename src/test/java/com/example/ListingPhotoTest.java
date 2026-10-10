@@ -20,6 +20,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import tools.jackson.databind.JsonNode;
 
 import java.net.URI;
@@ -31,7 +32,9 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -74,6 +77,86 @@ class ListingPhotoTest extends IntegrationTest {
             assertThat(stored.contentLength()).isEqualTo(file.length);
             assertThat(stored.contentType()).isEqualTo("image/jpeg");
         }
+    }
+
+    // Неподтверждённое фото не видно. После подтверждения оно в списке, и по ссылке читается тот же файл
+    @Test
+    void photoIsVisibleOnlyAfterConfirm() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        Long listingId = insertListing(seller, uniqueBrand(), ListingStatus.ACTIVE);
+        byte[] file = jpeg(3000);
+        JsonNode upload = json(startUpload(listingId, seller, "image/jpeg", file.length));
+        put(upload, file, "image/jpeg");
+        long photoId = upload.get("photoId").asLong();
+
+        assertThat(json(mockMvc.perform(get("/api/listings/{id}/photos", listingId))).isEmpty()).isTrue();
+
+        mockMvc.perform(post("/api/listings/{id}/photos/{photoId}/confirm", listingId, photoId).header("Authorization", bearer(seller)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.position").value(1));
+        mockMvc.perform(post("/api/listings/{id}/photos/{photoId}/confirm", listingId, photoId).header("Authorization", bearer(seller)))
+                .andExpect(status().isOk());
+
+        JsonNode photos = json(mockMvc.perform(get("/api/listings/{id}/photos", listingId)));
+        assertThat(photos).hasSize(1);
+        HttpResponse<byte[]> download = http.send(HttpRequest.newBuilder(URI.create(photos.get(0).get("url").asString())).build(),
+                HttpResponse.BodyHandlers.ofByteArray());
+        assertThat(download.statusCode()).isEqualTo(200);
+        assertThat(download.body()).isEqualTo(file);
+    }
+
+    @Test
+    void confirmBeforeUploadIs409() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        Long listingId = insertListing(seller, uniqueBrand(), ListingStatus.DRAFT);
+        long photoId = json(startUpload(listingId, seller, "image/png", 100)).get("photoId").asLong();
+
+        mockMvc.perform(post("/api/listings/{id}/photos/{photoId}/confirm", listingId, photoId).header("Authorization", bearer(seller)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Файл ещё не загружен в хранилище"));
+    }
+
+    // Заголовок и размер совпали с подписью, а внутри PDF. Подтверждение смотрит первые байты: файл удалён, место свободно
+    @Test
+    void foreignContentIsDeletedOnConfirm() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        Long listingId = insertListing(seller, uniqueBrand(), ListingStatus.DRAFT);
+        byte[] pdf = "%PDF-1.7 not a photo".getBytes();
+        JsonNode upload = json(startUpload(listingId, seller, "image/jpeg", pdf.length));
+        assertThat(put(upload, pdf, "image/jpeg").statusCode()).isEqualTo(200);
+        long photoId = upload.get("photoId").asLong();
+        String key = photoRepository.findById(photoId).orElseThrow().getObjectKey();
+
+        mockMvc.perform(post("/api/listings/{id}/photos/{photoId}/confirm", listingId, photoId).header("Authorization", bearer(seller)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Файл не image/jpeg, фото удалено. Загрузите заново"));
+
+        assertThat(photoRepository.findById(photoId)).isEmpty();
+        try (S3Client client = testS3Client())
+        {
+            assertThatThrownBy(() -> client.headObject(request -> request.bucket(BUCKET).key(key))).isInstanceOf(NoSuchKeyException.class);
+        }
+    }
+
+    // Фото черновика видит только продавец. Чужой photoId под своим объявлением не находится
+    @Test
+    void photosFollowListingVisibility() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        Long draft = insertListing(seller, uniqueBrand(), ListingStatus.DRAFT);
+        Long other = insertListing(seller, uniqueBrand(), ListingStatus.DRAFT);
+        insertPhoto(draft, 1);
+        long otherPhoto = json(startUpload(other, seller, "image/png", 100)).get("photoId").asLong();
+
+        mockMvc.perform(get("/api/listings/{id}/photos", draft)).andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/listings/{id}/photos", draft).header("Authorization", bearer(seller)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].position").value(1));
+        mockMvc.perform(post("/api/listings/{id}/photos/{photoId}/confirm", draft, otherPhoto).header("Authorization", bearer(seller)))
+                .andExpect(status().isNotFound());
     }
 
     // Тип и размер вошли в подпись: подменить файл после выдачи ссылки нельзя
@@ -169,6 +252,11 @@ class ListingPhotoTest extends IntegrationTest {
                 .header("Authorization", bearer(actor))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(Map.of("contentType", contentType, "sizeBytes", size))));
+    }
+
+    private JsonNode json(ResultActions result) throws Exception
+    {
+        return objectMapper.readTree(result.andReturn().getResponse().getContentAsString());
     }
 
     private HttpResponse<String> put(JsonNode upload, byte[] body, String contentType) throws Exception

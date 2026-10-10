@@ -118,6 +118,11 @@ public class GlobalExceptionHandler {
     {
         return build(HttpStatus.CONFLICT,"Объявление изменили одновременно с вами, обновите и повторите",request);
     }
+    @ExceptionHandler(PhotoStateException.class)
+    public ResponseEntity<ErrorResponse> photoConflict(PhotoStateException e, HttpServletRequest request)
+    {
+        return build(HttpStatus.CONFLICT,e.getMessage(),request);
+    }
     // Две загрузки фото одновременно заняли одно место: проверка в сервисе пропустила обе, а уникальность
     // (listing_id, position) остановила вторую. Она отложенная, отказ приходит уже при коммите.
     // Остальные нарушения ограничений — ошибка у нас, 500 с логом
