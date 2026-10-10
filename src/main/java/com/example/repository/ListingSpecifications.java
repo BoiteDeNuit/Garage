@@ -1,5 +1,6 @@
 package com.example.repository;
 
+import com.example.dto.ListingSearchCriteria;
 import com.example.model.BodyType;
 import com.example.model.FuelType;
 import com.example.model.Listing;
@@ -20,6 +21,23 @@ import java.time.Instant;
 public final class ListingSpecifications {
     private ListingSpecifications() {}
 
+    // Фильтр публичной ленты. Статус в нём всегда: какие бы параметры ни пришли, видны только опубликованные.
+    // Тем же условиям следует SQL сопоставления сохранённых поисков (SavedSearchRepository.findMatching)
+    public static Specification<Listing> publicFeed(ListingSearchCriteria criteria)
+    {
+        return Specification.allOf(
+                hasStatus(ListingStatus.ACTIVE),
+                matches(criteria.q()),
+                brand(criteria.brand()),
+                model(criteria.model()),
+                yearBetween(criteria.yearFrom(), criteria.yearTo()),
+                priceBetween(criteria.priceFrom(), criteria.priceTo()),
+                mileageAtMost(criteria.mileageTo()),
+                city(criteria.city()),
+                fuelType(criteria.fuelType()),
+                transmission(criteria.transmission()),
+                bodyType(criteria.bodyType()));
+    }
     public static Specification<Listing> hasStatus(ListingStatus status)
     {
         return (root, query, cb) -> cb.equal(root.get(Listing_.status), status);

@@ -32,9 +32,14 @@ public final class ListingSort {
     // дописал бы к алиасу избранного, а не объявления, поэтому она запрещена
     public static Pageable forFavorites(Pageable pageable)
     {
+        return fixedOrder(pageable, "Избранное сортируется только по дате добавления");
+    }
+    // Порядок задан в самом запросе: сортировка от клиента — 400 с объяснением, страница без сортировки
+    public static Pageable fixedOrder(Pageable pageable, String whySortIsFixed)
+    {
         if(pageable.getSort().isSorted())
         {
-            throw new InvalidRequestException("Избранное сортируется только по дате добавления");
+            throw new InvalidRequestException(whySortIsFixed);
         }
         checkOffset(pageable);
         return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());

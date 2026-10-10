@@ -160,12 +160,11 @@ public class ListingService {
         events.publishEvent(new PhotoFilesRemoved(photos.findObjectKeys(id)));
         repository.delete(listing);
     }
-    // Статус в фильтре всегда: какие бы параметры ни пришли, в ленту попадают только опубликованные.
     // Поиск по словам без сортировки от клиента идёт по релевантности: ListingSort.forTextSearch сортировку не ставит
     @Transactional(readOnly = true)
     public Page<ListingDto> findPublic(ListingSearchCriteria criteria, Pageable pageable)
     {
-        Specification<Listing> filter = publicFilter(criteria);
+        Specification<Listing> filter = ListingSpecifications.publicFeed(criteria);
         if(criteria.hasText() && pageable.getSort().isUnsorted())
         {
             filter = filter.and(ListingSpecifications.mostRelevantFirst(criteria.q()));
@@ -178,7 +177,7 @@ public class ListingService {
     @Transactional(readOnly = true)
     public FeedPage findFeed(ListingSearchCriteria criteria, @Nullable FeedCursor after, int size)
     {
-        Specification<Listing> filter = publicFilter(criteria);
+        Specification<Listing> filter = ListingSpecifications.publicFeed(criteria);
         if(after != null)
         {
             filter = filter.and(ListingSpecifications.after(after.publishedAt(), after.id()));
@@ -188,21 +187,6 @@ public class ListingService {
         List<Listing> page = hasNext ? rows.subList(0, size) : rows;
         String nextCursor = hasNext ? FeedCursor.after(page.getLast()).encode() : null;
         return new FeedPage(page.stream().map(ListingMapper::toDto).toList(), nextCursor);
-    }
-    private Specification<Listing> publicFilter(ListingSearchCriteria criteria)
-    {
-        return Specification.allOf(
-                ListingSpecifications.hasStatus(ListingStatus.ACTIVE),
-                ListingSpecifications.matches(criteria.q()),
-                ListingSpecifications.brand(criteria.brand()),
-                ListingSpecifications.model(criteria.model()),
-                ListingSpecifications.yearBetween(criteria.yearFrom(), criteria.yearTo()),
-                ListingSpecifications.priceBetween(criteria.priceFrom(), criteria.priceTo()),
-                ListingSpecifications.mileageAtMost(criteria.mileageTo()),
-                ListingSpecifications.city(criteria.city()),
-                ListingSpecifications.fuelType(criteria.fuelType()),
-                ListingSpecifications.transmission(criteria.transmission()),
-                ListingSpecifications.bodyType(criteria.bodyType()));
     }
     // Свои объявления всех статусов. Продавец — из токена: чужой id сюда не передать
     @Transactional(readOnly = true)
