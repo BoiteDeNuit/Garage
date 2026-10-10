@@ -5,8 +5,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AccountStatusUserDetailsChecker;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -57,21 +57,17 @@ public class SecurityConfig {
                         .accessDeniedHandler(((request, response, accessDeniedException) -> errorWriter.writeError(request,response,HttpStatus.FORBIDDEN,"Недостаточно прав"))))
                 .build();
     }
-    // По умолчанию Spring проверяет блокировку до пароля: на любой пароль заблокированный логин отвечал бы 403,
-    // а незаблокированный 401, и по ответу без пароля было бы видно, что логин есть и заблокирован.
-    // Здесь сначала пароль, потом блокировка: 403 получает только тот, кто знает пароль
+    // Менеджер для /auth/login. По умолчанию Spring проверяет блокировку до пароля: на любой пароль заблокированный
+    // логин отвечал бы 403, а незаблокированный 401, и по ответу без пароля было бы видно, что логин есть
+    // и заблокирован. Здесь сначала пароль, потом блокировка: 403 получает только тот, кто знает пароль.
+    // Провайдер не бин: бин-провайдер Spring подхватывает в общий менеджер и предупреждает об этом при старте
     @Bean
-    public DaoAuthenticationProvider authProvider(UserDetailsService users, PasswordEncoder encoder)
+    public AuthenticationManager authManager(UserDetailsService users, PasswordEncoder encoder)
     {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider(users);
         provider.setPasswordEncoder(encoder);
         provider.setPreAuthenticationChecks(user -> {});
         provider.setPostAuthenticationChecks(new AccountStatusUserDetailsChecker());
-        return provider;
-    }
-    @Bean
-    public AuthenticationManager authManager(AuthenticationConfiguration cfg) throws Exception
-    {
-        return cfg.getAuthenticationManager();
+        return new ProviderManager(provider);
     }
 }

@@ -70,7 +70,7 @@ public class GlobalExceptionHandler {
     {
         return build(HttpStatus.UNAUTHORIZED,"Неверный логин или пароль",request);
     }
-    // Пароль верный, но аккаунт заблокирован. Сюда попадают только после проверки пароля (SecurityConfig.authProvider)
+    // Пароль верный, но аккаунт заблокирован. Сюда попадают только после проверки пароля (SecurityConfig.authManager)
     @ExceptionHandler(LockedException.class)
     public ResponseEntity<ErrorResponse> locked(LockedException e, HttpServletRequest request)
     {

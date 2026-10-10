@@ -68,9 +68,11 @@ public class UserBanService {
     {
         find(username).unban();
     }
+    // Под блокировкой строки: две блокировки одного пользователя подряд (двойной клик) дадут 200 и 409,
+    // а не два 200, где вторая перезаписала бы время и причину первой
     private AppUser find(String username)
     {
-        return users.findByUsername(username)
+        return users.findForUpdate(username)
                 .orElseThrow(() -> new EntityNotFoundException("Пользователь " + username + " не найден"));
     }
 }

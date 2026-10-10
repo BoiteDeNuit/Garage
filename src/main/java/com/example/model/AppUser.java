@@ -1,11 +1,15 @@
 package com.example.model;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.Instant;
 
+// UPDATE только изменённых колонок. Без этого Hibernate пишет строку целиком из того, что прочитал:
+// смена роли, начатая до блокировки и закоммиченная после, вернула бы banned_at = null и молча сняла блокировку
 @Entity
 @Table(name = "users")
+@DynamicUpdate
 public class AppUser {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
