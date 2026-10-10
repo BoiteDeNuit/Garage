@@ -12,6 +12,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface ListingRepository extends JpaRepository<Listing,Long>, JpaSpecificationExecutor<Listing> {
@@ -43,4 +44,29 @@ public interface ListingRepository extends JpaRepository<Listing,Long>, JpaSpeci
             + "and (l.moderatorId is null or l.moderatorId = :moderatorId or l.claimedAt < :expiredBefore)")
     int claim(@Param("id") Long id, @Param("moderatorId") Long moderatorId, @Param("pending") ListingStatus pending,
               @Param("now") Instant now, @Param("expiredBefore") Instant expiredBefore);
+
+    // Блокировка продавца убирает его объявления с витрины и из очереди одним оператором: опубликованные — в архив,
+    // ждущие проверки — отклонены с причиной блокировки, захват модератора снят. Запись в журнал — в том же
+    // операторе (CTE), по строке на объявление. Внутри SET статус ещё старый, в RETURNING уже новый.
+    // Возвращает id: их карточки надо убрать из кэша. Черновики, проданные и архив не трогает
+    @Query(value = """
+            with hidden as (
+                update listings
+                set status = case status when 'ACTIVE' then 'ARCHIVED' else 'REJECTED' end,
+                    rejection_reason = case status when 'PENDING_REVIEW' then :reason else rejection_reason end,
+                    moderator_id = null,
+                    claimed_at = null,
+                    version = version + 1,
+                    updated_at = :now
+                where seller_id = :sellerId and status in ('ACTIVE', 'PENDING_REVIEW')
+                returning id, status
+            ), logged as (
+                insert into listing_status_history (listing_id, from_status, to_status, actor_id, reason, changed_at)
+                select id, case status when 'ARCHIVED' then 'ACTIVE' else 'PENDING_REVIEW' end, status, :adminId, :reason, :now
+                from hidden
+            )
+            select id from hidden order by id
+            """, nativeQuery = true)
+    List<Long> hideAllOfSeller(@Param("sellerId") Long sellerId, @Param("adminId") Long adminId,
+                               @Param("reason") String reason, @Param("now") Instant now);
 }

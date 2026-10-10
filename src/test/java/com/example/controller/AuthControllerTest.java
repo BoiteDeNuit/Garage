@@ -6,6 +6,7 @@ import com.example.dto.UserDto;
 import com.example.exception.UsernameTakenException;
 import com.example.model.Role;
 import com.example.ratelimit.RateLimiter;
+import com.example.security.AppUserPrincipal;
 import com.example.security.JwtService;
 import com.example.security.SecurityConfig;
 import com.example.security.SecurityErrorWriter;
@@ -16,6 +17,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.ObjectMapper;
@@ -115,5 +117,25 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.message").value(containsString("Слишком много попыток")));
 
         verify(rateLimiter).allow(argThat(key -> key.startsWith("rate:login:")), anyInt(), any());
+    }
+
+    // Блокировка проверяется после пароля: 403 видит только тот, кто знает пароль, остальные — обычный 401
+    @Test
+    void bannedUserGets403OnlyWithRightPassword() throws Exception
+    {
+        when(rateLimiter.allow(anyString(), anyInt(), any())).thenReturn(true);
+        String hash = new BCryptPasswordEncoder().encode("correct-horse-battery");
+        when(userDetailsService.loadUserByUsername("spammer")).thenAnswer(call -> new AppUserPrincipal(7L, "spammer", hash, Role.USER, true));
+
+        mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoginRequest("spammer", "wrong-password"))))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Неверный логин или пароль"));
+        mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoginRequest("spammer", "correct-horse-battery"))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Аккаунт заблокирован"));
     }
 }

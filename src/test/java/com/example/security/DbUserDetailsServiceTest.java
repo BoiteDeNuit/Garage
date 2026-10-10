@@ -12,6 +12,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Instant;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -58,6 +59,18 @@ class DbUserDetailsServiceTest {
 
         assertThat(principal.getPassword()).isNull();
         assertThat(principal.getId()).isEqualTo(42L);
+    }
+
+    @Test
+    void bannedUserIsLocked()
+    {
+        AppUser banned = user("spammer", Role.USER);
+        banned.ban("Спам в объявлениях", Instant.parse("2026-10-10T20:00:00Z"));
+        when(repository.findByUsername("spammer")).thenReturn(Optional.of(banned));
+        when(repository.findByUsername("seller")).thenReturn(Optional.of(user("seller", Role.USER)));
+
+        assertThat(service.loadUserByUsername("spammer").isAccountNonLocked()).isFalse();
+        assertThat(service.loadUserByUsername("seller").isAccountNonLocked()).isTrue();
     }
 
     @Test

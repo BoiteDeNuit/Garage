@@ -46,6 +46,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
            errorWriter.writeError(request,response, HttpStatus.UNAUTHORIZED,"Недействительный токен");
            return;
        }
+       // Пользователь читается из базы на каждый запрос, поэтому блокировка действует сразу, токен ждать не нужно.
+       // 403, а не 401: токен настоящий, новый вход не поможет
+       if(!user.isAccountNonLocked())
+       {
+           errorWriter.writeError(request,response, HttpStatus.FORBIDDEN,"Аккаунт заблокирован");
+           return;
+       }
         var auth = new UsernamePasswordAuthenticationToken(user,null,user.getAuthorities());
         SecurityContextHolder.getContext().setAuthentication(auth);
        filterChain.doFilter(request,response);

@@ -3,12 +3,15 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.AccountStatusUserDetailsChecker;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -53,6 +56,18 @@ public class SecurityConfig {
                         .authenticationEntryPoint((request, response, authException) -> errorWriter.writeError(request,response, HttpStatus.UNAUTHORIZED,"Требуется аутентификация"))
                         .accessDeniedHandler(((request, response, accessDeniedException) -> errorWriter.writeError(request,response,HttpStatus.FORBIDDEN,"Недостаточно прав"))))
                 .build();
+    }
+    // По умолчанию Spring проверяет блокировку до пароля: на любой пароль заблокированный логин отвечал бы 403,
+    // а незаблокированный 401, и по ответу без пароля было бы видно, что логин есть и заблокирован.
+    // Здесь сначала пароль, потом блокировка: 403 получает только тот, кто знает пароль
+    @Bean
+    public DaoAuthenticationProvider authProvider(UserDetailsService users, PasswordEncoder encoder)
+    {
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(users);
+        provider.setPasswordEncoder(encoder);
+        provider.setPreAuthenticationChecks(user -> {});
+        provider.setPostAuthenticationChecks(new AccountStatusUserDetailsChecker());
+        return provider;
     }
     @Bean
     public AuthenticationManager authManager(AuthenticationConfiguration cfg) throws Exception

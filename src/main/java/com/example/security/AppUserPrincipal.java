@@ -15,12 +15,18 @@ public class AppUserPrincipal implements UserDetails, CredentialsContainer {
     private final String username;
     private String passwordHash;
     private final Role role;
+    private final boolean banned;
     public AppUserPrincipal(Long id, String username, String passwordHash, Role role)
+    {
+        this(id, username, passwordHash, role, false);
+    }
+    public AppUserPrincipal(Long id, String username, String passwordHash, Role role, boolean banned)
     {
         this.id=id;
         this.username=username;
         this.passwordHash=passwordHash;
         this.role=role;
+        this.banned=banned;
     }
     public Long getId()
     {
@@ -44,6 +50,12 @@ public class AppUserPrincipal implements UserDetails, CredentialsContainer {
     public String getUsername()
     {
         return username;
+    }
+    // Заблокированного не пускают ни по паролю (SecurityConfig, проверка после пароля), ни по токену (JwtAuthFilter)
+    @Override
+    public boolean isAccountNonLocked()
+    {
+        return !banned;
     }
     // После проверки пароля Spring стирает хэш, чтобы он не жил в SecurityContext
     @Override

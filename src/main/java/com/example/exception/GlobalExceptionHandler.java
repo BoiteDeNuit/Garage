@@ -15,6 +15,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AuthenticationTrustResolver;
 import org.springframework.security.authentication.AuthenticationTrustResolverImpl;
+import org.springframework.security.authentication.LockedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.validation.FieldError;
@@ -68,6 +69,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> badCredentials(AuthenticationException e, HttpServletRequest request)
     {
         return build(HttpStatus.UNAUTHORIZED,"Неверный логин или пароль",request);
+    }
+    // Пароль верный, но аккаунт заблокирован. Сюда попадают только после проверки пароля (SecurityConfig.authProvider)
+    @ExceptionHandler(LockedException.class)
+    public ResponseEntity<ErrorResponse> locked(LockedException e, HttpServletRequest request)
+    {
+        return build(HttpStatus.FORBIDDEN,"Аккаунт заблокирован",request);
     }
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> mismatchArgument(MethodArgumentTypeMismatchException e, HttpServletRequest request)

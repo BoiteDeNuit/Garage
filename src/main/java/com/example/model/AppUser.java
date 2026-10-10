@@ -2,6 +2,8 @@ package com.example.model;
 
 import jakarta.persistence.*;
 
+import java.time.Instant;
+
 @Entity
 @Table(name = "users")
 public class AppUser {
@@ -14,6 +16,8 @@ public class AppUser {
     private String passwordHash;
     @Enumerated(EnumType.STRING)
     private Role role;
+    private Instant bannedAt;
+    private String banReason;
     protected AppUser () {}
     public AppUser(String username, String passwordHash, Role role)
     {
@@ -28,6 +32,20 @@ public class AppUser {
     public void changeRole(Role role)
     {
         this.role = role;
+    }
+    public void ban(String reason, Instant now)
+    {
+        this.bannedAt = now;
+        this.banReason = reason;
+    }
+    public void unban()
+    {
+        this.bannedAt = null;
+        this.banReason = null;
+    }
+    public boolean isBanned()
+    {
+        return bannedAt != null;
     }
 
     public Long getId() {
@@ -44,5 +62,15 @@ public class AppUser {
 
     public String getPasswordHash() {
         return passwordHash;
+    }
+
+    public Instant getBannedAt()
+    {
+        return bannedAt;
+    }
+
+    public String getBanReason()
+    {
+        return banReason;
     }
 }
