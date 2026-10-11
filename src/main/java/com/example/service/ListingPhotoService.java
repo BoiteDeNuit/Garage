@@ -31,6 +31,7 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -98,9 +99,9 @@ public class ListingPhotoService {
         boolean sameFile = stored.sizeBytes() == photo.getSizeBytes() && photo.getContentType().equals(stored.contentType());
         if(!sameFile || !PhotoSignature.matches(photo.getContentType(), head))
         {
-            // Чужой формат под видом фото: файл и место освобождаются, загружать заново
-            storage.delete(photo.getObjectKey());
-            transactions.executeWithoutResult(status -> photos.deleteById(photoId));
+            // Чужой формат под видом фото: место освобождается, следующие фото сдвигаются, файл удалится после коммита.
+            // Раньше строка удалялась без сдвига, и дыра в нумерации съедала одно из 20 мест
+            transactions.executeWithoutResult(status -> photos.findById(photoId).ifPresent(this::remove));
             throw new InvalidRequestException("Файл не " + photo.getContentType() + ", фото удалено. Загрузите заново");
         }
         return transactions.execute(status -> {
@@ -123,13 +124,27 @@ public class ListingPhotoService {
                 .map(this::toDto)
                 .toList();
     }
-    // Строка и сдвиг остальных фото — в транзакции, файл из хранилища — после коммита (PhotoFilesCleaner)
     @Transactional
     public void delete(Long listingId, Long photoId, AppUserPrincipal actor)
     {
-        ListingPhoto photo = photoForChange(listingId, photoId, actor);
+        remove(photoForChange(listingId, photoId, actor));
+    }
+    // Для уборки (PhotoCleanup): загрузку начали и бросили. Своя транзакция на каждое фото: место читается свежим,
+    // после сдвига в той же транзакции место следующего фото того же объявления уже было бы другим.
+    // Успели подтвердить, пока уборка дошла до фото, — не трогаем
+    @Transactional
+    public boolean removeIfStillPending(Long photoId, Instant startedBefore)
+    {
+        Optional<ListingPhoto> photo = photos.findById(photoId)
+                .filter(found -> found.getStatus() == PhotoStatus.PENDING && found.getCreatedAt().isBefore(startedBefore));
+        photo.ifPresent(this::remove);
+        return photo.isPresent();
+    }
+    // Строка и сдвиг остальных — в транзакции, файл — после коммита (PhotoFilesCleaner)
+    private void remove(ListingPhoto photo)
+    {
         photos.delete(photo);
-        photos.closeGap(listingId, photo.getPosition());
+        photos.closeGap(photo.getListing().getId(), photo.getPosition());
         events.publishEvent(new PhotoFilesRemoved(List.of(photo.getObjectKey())));
     }
     // Новый порядок — список всех фото объявления, включая неподтверждённые: места у них общие.

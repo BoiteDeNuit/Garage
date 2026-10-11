@@ -132,6 +132,7 @@ class ListingPhotoTest extends IntegrationTest {
         assertThat(putToStorage(upload, pdf, "image/jpeg").statusCode()).isEqualTo(200);
         long photoId = upload.get("photoId").asLong();
         String key = photoRepository.findById(photoId).orElseThrow().getObjectKey();
+        insertPhoto(listingId, 2);
 
         mockMvc.perform(post("/api/listings/{id}/photos/{photoId}/confirm", listingId, photoId).header("Authorization", bearer(seller)))
                 .andExpect(status().isBadRequest())
@@ -139,6 +140,8 @@ class ListingPhotoTest extends IntegrationTest {
 
         assertThat(photoRepository.findById(photoId)).isEmpty();
         assertFileIsGone(key);
+        // Следующее фото поднялось на освободившееся место: дыры в нумерации нет
+        assertThat(jdbcTemplate.queryForList("select position from listing_photos where listing_id = ?", Integer.class, listingId)).containsExactly(1);
     }
 
     // Фото черновика видит только продавец. Чужой photoId под своим объявлением не находится

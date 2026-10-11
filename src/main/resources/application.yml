@@ -66,6 +66,12 @@ cleanup:
   refresh-tokens:
     cron: "0 30 3 * * *"
     keep-after-expiry: 7d
+  photo-uploads:
+    cron: "0 15 * * * *"
+    pending-ttl: 1d
+  photo-files:
+    cron: "0 0 4 * * *"
+    orphan-age: 1d
 auth:
   refresh:
     ttl: 14d

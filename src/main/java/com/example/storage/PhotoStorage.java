@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 // Фото не идут через приложение: клиент кладёт файл прямо в хранилище по presigned PUT.
 // Приложение не держит поток на каждую загрузку и не платит за трафик дважды
@@ -82,6 +83,15 @@ public class PhotoStorage {
                 .bucket(properties.bucket())
                 .delete(delete -> delete.objects(objects).quiet(true)));
         return response.errors().size();
+    }
+    // Обход файлов под префиксом страницами: ListObjectsV2 отдаёт до 1000 ключей за запрос, следующую страницу
+    // пагинатор SDK запросит сам. Всё в память не собираем: файлов может быть миллионы
+    public void forEachPage(String prefix, Consumer<List<StoredKey>> page)
+    {
+        client.listObjectsV2Paginator(request -> request.bucket(properties.bucket()).prefix(prefix))
+                .forEach(response -> page.accept(response.contents().stream()
+                        .map(object -> new StoredKey(object.key(), object.lastModified()))
+                        .toList()));
     }
     // SDK отдаёт имена в нижнем регистре (content-type), клиенту привычнее Content-Type: регистр имён HTTP не важен.
     // host клиент выставит сам по адресу ссылки, передавать его не нужно

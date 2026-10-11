@@ -163,21 +163,25 @@ class ListingPhotoServiceTest {
         assertThat(photo.getStatus()).isEqualTo(PhotoStatus.PENDING);
     }
 
-    // Размер и заголовок совпали с подписью, но внутри не JPEG: файл и строка удаляются, место свободно
+    // Размер и заголовок совпали с подписью, но внутри не JPEG: строка удаляется, следующие фото сдвигаются,
+    // файл удалится после коммита, как при обычном удалении
     @Test
     void confirmOfForeignContentDeletesFileAndPhoto()
     {
         ListingPhoto photo = pendingPhoto();
         when(listings.findById(1L)).thenReturn(Optional.of(listing()));
         when(photos.findByIdAndListingId(50L, 1L)).thenReturn(Optional.of(photo));
+        when(photos.findById(50L)).thenReturn(Optional.of(photo));
         when(storage.find(photo.getObjectKey())).thenReturn(Optional.of(new StoredObject(2000L, "image/jpeg")));
         when(storage.readHead(photo.getObjectKey(), PhotoSignature.HEAD_BYTES)).thenReturn("%PDF-1.7 ....".getBytes());
 
         assertThatThrownBy(() -> service.confirm(1L, 50L, principal(7L)))
                 .isInstanceOf(InvalidRequestException.class)
                 .hasMessage("Файл не image/jpeg, фото удалено. Загрузите заново");
-        verify(storage).delete(photo.getObjectKey());
-        verify(photos).deleteById(50L);
+        verify(photos).delete(photo);
+        verify(photos).closeGap(1L, photo.getPosition());
+        verify(events).publishEvent(new PhotoFilesRemoved(List.of(photo.getObjectKey())));
+        verify(storage, never()).delete(photo.getObjectKey());
     }
 
     @Test
