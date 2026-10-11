@@ -16,6 +16,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -27,22 +29,21 @@ class AdminInitializerTest {
     @Test
     void createsAdminWhenMissing()
     {
-        when(repository.findByUsername("boss")).thenReturn(Optional.empty());
+        when(repository.insertAdminIfAbsent(eq("boss"), anyString())).thenReturn(1);
 
         new AdminInitializer(repository, encoder, "boss", "secret").run(null);
 
-        ArgumentCaptor<AppUser> captor = ArgumentCaptor.forClass(AppUser.class);
-        verify(repository).save(captor.capture());
-        AppUser saved = captor.getValue();
-        assertThat(saved.getUsername()).isEqualTo("boss");
-        assertThat(saved.getRole()).isEqualTo(Role.ADMIN);
-        assertThat(encoder.matches("secret", saved.getPasswordHash())).isTrue();
+        ArgumentCaptor<String> hash = ArgumentCaptor.forClass(String.class);
+        verify(repository).insertAdminIfAbsent(eq("boss"), hash.capture());
+        assertThat(encoder.matches("secret", hash.getValue())).isTrue();
+        verify(repository, never()).findByUsername(any());
     }
 
     @Test
     void updatesPasswordWhenChanged()
     {
         AppUser admin = new AppUser("boss", encoder.encode("old"), Role.ADMIN);
+        when(repository.insertAdminIfAbsent(eq("boss"), anyString())).thenReturn(0);
         when(repository.findByUsername("boss")).thenReturn(Optional.of(admin));
 
         new AdminInitializer(repository, encoder, "boss", "new").run(null);
@@ -55,6 +56,7 @@ class AdminInitializerTest {
     void keepsAdminWhenPasswordMatches()
     {
         AppUser admin = new AppUser("boss", encoder.encode("secret"), Role.ADMIN);
+        when(repository.insertAdminIfAbsent(eq("boss"), anyString())).thenReturn(0);
         when(repository.findByUsername("boss")).thenReturn(Optional.of(admin));
 
         new AdminInitializer(repository, encoder, "boss", "secret").run(null);
@@ -68,6 +70,7 @@ class AdminInitializerTest {
     {
         String hash = encoder.encode("users-own-password");
         AppUser user = new AppUser("boss", hash, Role.USER);
+        when(repository.insertAdminIfAbsent(eq("boss"), anyString())).thenReturn(0);
         when(repository.findByUsername("boss")).thenReturn(Optional.of(user));
 
         assertThatThrownBy(() -> new AdminInitializer(repository, encoder, "boss", "from-env").run(null))

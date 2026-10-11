@@ -54,6 +54,11 @@ spring:
     properties:
       hibernate:
         format_sql: true
+# За nginx адрес запроса — адрес прокси, и лимит входов стал бы общим на всех. Tomcat (RemoteIpValve) берёт адрес
+# клиента из X-Forwarded-For, но только если запрос пришёл с внутреннего адреса (10.*, 172.16–31.*, 192.168.*, 127.*):
+# клиенту снаружи, который пришлёт заголовок сам, подменить адрес не выйдет
+server:
+  forward-headers-strategy: native
 admin:
   username: ${ADMIN_USERNAME}
   password: ${ADMIN_PASSWORD}
