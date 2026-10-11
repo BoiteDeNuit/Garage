@@ -60,8 +60,14 @@ admin:
 jwt:
   secret: ${JWT_SECRET}
   ttl-minutes: 30
+listings:
+  # Сколько опубликованное висит в ленте, потом уходит в архив
+  publication-period: 60d
+  expiry-cron: "0 10 * * * *"
+  # Больше за один запуск не снимаем: см. ListingExpiry
+  expiry-max-per-run: 10000
 cleanup:
-  # Сколько строк удаляет одна транзакция уборки
+  # Сколько строк обрабатывает одна транзакция уборки
   batch-size: 1000
   refresh-tokens:
     cron: "0 30 3 * * *"

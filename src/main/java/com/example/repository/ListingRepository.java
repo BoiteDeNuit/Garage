@@ -69,4 +69,37 @@ public interface ListingRepository extends JpaRepository<Listing,Long>, JpaSpeci
             """, nativeQuery = true)
     List<Long> hideAllOfSeller(@Param("sellerId") Long sellerId, @Param("adminId") Long adminId,
                                @Param("reason") String reason, @Param("now") Instant now);
+
+    // Пачка опубликованных дольше срока — в архив, запись в журнал и уведомление продавцу, всё одним оператором.
+    // Старые идут первыми по idx_listings_feed. SKIP LOCKED: объявление, которое продавец сейчас правит, ждать
+    // не будем, его заберёт следующий запуск. event_id из id и времени публикации: повтор пачки не задвоит уведомление,
+    // а после новой публикации и нового срока уведомление будет новым
+    @Query(value = """
+            with expired as (
+                update listings
+                set status = 'ARCHIVED',
+                    version = version + 1,
+                    updated_at = :now
+                where id in (
+                    select id from listings
+                    where status = 'ACTIVE' and published_at < :before
+                    order by published_at, id
+                    limit :batch
+                    for update skip locked
+                )
+                returning id, seller_id, published_at
+            ), logged as (
+                insert into listing_status_history (listing_id, from_status, to_status, actor_id, reason, changed_at)
+                select id, 'ACTIVE', 'ARCHIVED', null, :reason, :now
+                from expired
+            ), notified as (
+                insert into notifications (user_id, event_id, type, listing_id, created_at)
+                select seller_id, md5('expired:' || id || ':' || published_at)::uuid, 'LISTING_EXPIRED', id, :now
+                from expired
+                on conflict (user_id, event_id) do nothing
+            )
+            select id from expired order by id
+            """, nativeQuery = true)
+    List<Long> expireBatch(@Param("before") Instant before, @Param("now") Instant now,
+                           @Param("reason") String reason, @Param("batch") int batch);
 }
