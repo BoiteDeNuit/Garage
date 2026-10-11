@@ -80,7 +80,23 @@ public class RefreshTokenService {
         }
         IssuedRefreshToken next = create(user.getId(), presented.getFamilyId(), now);
         tokens.findById(presented.getId()).orElseThrow(InvalidRefreshTokenException::new).replacedBy(next.id());
-        return new RotatedSession(user.getUsername(), List.of("ROLE_" + user.getRole().name()), next);
+        return new RotatedSession(user.getUsername(), List.of("ROLE_" + user.getRole().name()), user.getTokenVersion(), next);
+    }
+    // Выход с этого устройства: гасится семья, к которой относится кука. Неизвестная кука — не ошибка, выйти и так вышли.
+    // Access-токен этого входа доживёт свои 30 минут: клиент его просто выбрасывает
+    @Transactional
+    public void logout(String raw)
+    {
+        Instant now = Instant.now(clock);
+        tokens.findByTokenHash(hash(raw)).ifPresent(token -> tokens.revokeFamily(token.getFamilyId(), RevokeReason.LOGOUT, now));
+    }
+    // Выход отовсюду: все refresh-токены и все выданные access-токены (версия в токене станет меньше, чем в базе)
+    @Transactional
+    public void logoutEverywhere(Long userId)
+    {
+        AppUser user = users.findById(userId).orElseThrow(InvalidRefreshTokenException::new);
+        user.revokeTokens();
+        tokens.revokeAllOfUser(userId, RevokeReason.LOGOUT, Instant.now(clock));
     }
     private void revokeReused(RefreshToken token, Instant now)
     {

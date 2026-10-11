@@ -6,6 +6,7 @@ import com.example.model.ListingStatus;
 import com.example.model.Role;
 import com.example.support.IntegrationTest;
 import jakarta.persistence.EntityManager;
+import jakarta.servlet.http.Cookie;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.LockModeType;
 import org.junit.jupiter.api.Test;
@@ -107,12 +108,15 @@ class BanTest extends IntegrationTest {
                 .containsExactly("ACTIVE->ARCHIVED", "PENDING_REVIEW->REJECTED");
     }
 
-    // После разблокировки вход работает, объявления остаются в архиве: опубликовать снова решает продавец
+    // После разблокировки нужен новый вход: токены, выданные до блокировки, не оживают.
+    // Объявления остаются в архиве: опубликовать снова решает продавец
     @Test
     void unbanRestoresAccessButNotListings() throws Exception
     {
-        AppUser seller = createUser(Role.USER);
+        AppUser seller = createUser(Role.USER, "correct-horse-battery");
         Long active = insertListing(seller, uniqueBrand(), ListingStatus.ACTIVE);
+        String oldToken = bearer(seller);
+        String oldRefresh = login(seller.getUsername(), "correct-horse-battery").andReturn().getResponse().getCookie("refresh_token").getValue();
         ban(seller, "Ошибочная блокировка").andExpect(status().isOk());
 
         mockMvc.perform(delete("/api/admin/users/{username}/ban", seller.getUsername()).header("Authorization", bearer(admin())))
@@ -120,8 +124,15 @@ class BanTest extends IntegrationTest {
         mockMvc.perform(delete("/api/admin/users/{username}/ban", seller.getUsername()).header("Authorization", bearer(admin())))
                 .andExpect(status().isNoContent());
 
+        mockMvc.perform(get("/api/me").header("Authorization", oldToken))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Токен отозван, войдите заново"));
+        mockMvc.perform(post("/auth/refresh").cookie(new Cookie("refresh_token", oldRefresh))).andExpect(status().isUnauthorized());
+        assertThat(jdbcTemplate.queryForObject("select revoke_reason from refresh_tokens where user_id = ?", String.class, seller.getId())).isEqualTo("BAN");
+
         assertThat(statusOf(active)).isEqualTo("ARCHIVED");
-        mockMvc.perform(post("/api/listings/{id}/publish", active).header("Authorization", bearer(seller)))
+        AppUser relogged = userRepository.findById(seller.getId()).orElseThrow();
+        mockMvc.perform(post("/api/listings/{id}/publish", active).header("Authorization", bearer(relogged)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ACTIVE"));
     }

@@ -26,11 +26,14 @@ public class JwtService {
         this.ttlMillis = ttlMinutes * 60 * 1000;
     }
 
-    public String generateToken(String username, Collection<String> roles) {
+    // tv — версия токенов пользователя на момент выдачи. Выход отовсюду и блокировка её поднимают,
+    // и JwtAuthFilter отвергает токен, не дожидаясь срока. По времени выдачи так не сделать: iat в секундах
+    public String generateToken(String username, Collection<String> roles, int tokenVersion) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(username)
                 .claim("roles", roles)
+                .claim("tv", tokenVersion)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusMillis(ttlMillis)))
                 .signWith(key)
@@ -39,6 +42,12 @@ public class JwtService {
 
     public String extractUsername(String token) {
         return parse(token).getPayload().getSubject();
+    }
+
+    // Токены, выданные до появления версии, считаются версией 0
+    public int extractTokenVersion(String token) {
+        Integer version = parse(token).getPayload().get("tv", Integer.class);
+        return version == null ? 0 : version;
     }
 
     @SuppressWarnings("unchecked")

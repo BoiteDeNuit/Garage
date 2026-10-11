@@ -8,7 +8,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
@@ -36,10 +35,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
            return;
        }
        String token = header.substring(7);
-       UserDetails user;
+       AppUserPrincipal user;
+       int tokenVersion;
        try {
            String username = service.extractUsername(token);
-           user = userDetailsService.loadUserByUsername(username);
+           tokenVersion = service.extractTokenVersion(token);
+           user = (AppUserPrincipal) userDetailsService.loadUserByUsername(username);
        }
        catch (JwtException | IllegalArgumentException | UsernameNotFoundException e)
        {
@@ -51,6 +52,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
        if(!user.isAccountNonLocked())
        {
            errorWriter.writeError(request,response, HttpStatus.FORBIDDEN,"Аккаунт заблокирован");
+           return;
+       }
+       // После выхода отовсюду или блокировки версия в базе больше, чем в токене
+       if(tokenVersion != user.getTokenVersion())
+       {
+           errorWriter.writeError(request,response, HttpStatus.UNAUTHORIZED,"Токен отозван, войдите заново");
            return;
        }
         var auth = new UsernamePasswordAuthenticationToken(user,null,user.getAuthorities());

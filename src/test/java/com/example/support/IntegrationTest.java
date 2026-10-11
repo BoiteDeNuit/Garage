@@ -139,7 +139,7 @@ public abstract class IntegrationTest {
     // Токен напрямую через JwtService: вход через /auth/login упирается в общий лимит попыток
     protected String bearer(AppUser user)
     {
-        return "Bearer " + jwtService.generateToken(user.getUsername(), List.of("ROLE_" + user.getRole()));
+        return "Bearer " + jwtService.generateToken(user.getUsername(), List.of("ROLE_" + user.getRole()), user.getTokenVersion());
     }
     protected String uniqueBrand()
     {

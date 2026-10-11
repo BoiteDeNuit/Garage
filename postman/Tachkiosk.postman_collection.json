@@ -3513,14 +3513,15 @@
           }
         },
         {
-          "name": "Тот же токен снова работает",
+          "name": "Старый токен после разблокировки — 401",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"200\", () => pm.response.to.have.status(200));"
+                  "pm.test(\"401\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"причина\", () => pm.expect(pm.response.json().message).to.eql(\"Токен отозван, войдите заново\"));"
                 ]
               }
             }
@@ -3548,7 +3549,8 @@
                 "me",
                 "listings"
               ]
-            }
+            },
+            "description": "Блокировка подняла версию токенов: выданные до неё не оживают, нужен новый вход"
           }
         },
         {
@@ -3579,6 +3581,147 @@
                 "api",
                 "listings",
                 "{{archiveId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Выход админа",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"204\", () => pm.response.to.have.status(204));",
+                  "pm.test(\"кука стёрта\", () => pm.expect(pm.response.headers.get(\"Set-Cookie\")).to.include(\"Max-Age=0\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Кука refresh_token от входа админа гасится и стирается"
+          }
+        },
+        {
+          "name": "Refresh после выхода — 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Выход отовсюду",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout-all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout-all"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Токен админа после выхода отовсюду — 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/listings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "listings"
               ]
             }
           }

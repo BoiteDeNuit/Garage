@@ -42,6 +42,8 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // Выход отовсюду — по access-токену: нужно знать, чьи сессии гасить
+                        .requestMatchers(HttpMethod.POST, "/auth/logout-all").authenticated()
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/listings/**").permitAll()

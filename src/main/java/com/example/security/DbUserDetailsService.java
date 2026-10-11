@@ -19,6 +19,6 @@ public class DbUserDetailsService implements UserDetailsService {
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException
     {
         AppUser user = repository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("Пользователь: " + username + " не найден"));
-        return new AppUserPrincipal(user.getId(),user.getUsername(),user.getPasswordHash(),user.getRole(),user.isBanned());
+        return new AppUserPrincipal(user.getId(),user.getUsername(),user.getPasswordHash(),user.getRole(),user.isBanned(),user.getTokenVersion());
     }
 }

@@ -15,7 +15,9 @@ import com.example.security.JwtService;
 import com.example.service.AuthService;
 import com.example.service.RefreshTokenService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -28,6 +30,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -92,7 +95,7 @@ public class AuthController {
         List<String> roles = auth.getAuthorities().stream().map(GrantedAuthority::getAuthority).filter(role -> role.startsWith("ROLE_")).toList();
         AppUserPrincipal principal = (AppUserPrincipal) auth.getPrincipal();
         IssuedRefreshToken refresh = refreshTokens.issue(principal.getId());
-        return withRefreshCookie(new LoginResponse(service.generateToken(auth.getName(),roles)), refresh);
+        return withRefreshCookie(new LoginResponse(service.generateToken(auth.getName(),roles,principal.getTokenVersion())), refresh);
     }
     @Operation(summary = "Новый токен по refresh-куке", description = "Старый refresh гасится, в куке приходит новый. "
             + "Погашенный refresh, присланный снова, отзывает все токены этого входа")
@@ -107,7 +110,28 @@ public class AuthController {
             throw new InvalidRefreshTokenException();
         }
         RotatedSession session = refreshTokens.rotate(refreshToken);
-        return withRefreshCookie(new LoginResponse(service.generateToken(session.username(), session.roles())), session.refresh());
+        return withRefreshCookie(new LoginResponse(service.generateToken(session.username(), session.roles(), session.tokenVersion())), session.refresh());
+    }
+    @Operation(summary = "Выйти", description = "Гасит refresh-токены этого входа и стирает куку. Access-токен клиент выбрасывает сам")
+    @ApiResponse(responseCode = "204", description = "Вышли, в том числе если куки не было")
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@CookieValue(name = REFRESH_COOKIE, required = false) String refreshToken)
+    {
+        if(refreshToken != null)
+        {
+            refreshTokens.logout(refreshToken);
+        }
+        return ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE, clearedRefreshCookie()).build();
+    }
+    @Operation(summary = "Выйти отовсюду", description = "Гасит все refresh-токены пользователя и все выданные ему access-токены")
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponse(responseCode = "204", description = "OK")
+    @ApiResponse(responseCode = "401", description = "Нет токена")
+    @PostMapping("/logout-all")
+    public ResponseEntity<Void> logoutAll(@Parameter(hidden = true) @AuthenticationPrincipal AppUserPrincipal principal)
+    {
+        refreshTokens.logoutEverywhere(principal.getId());
+        return ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE, clearedRefreshCookie()).build();
     }
     // HttpOnly: скрипт страницы куку не прочитает, XSS не унесёт долгую сессию. Path=/auth: кука уходит только сюда,
     // не в каждый запрос к API. SameSite=Strict: с чужого сайта браузер её не пришлёт, это защита /auth/refresh от CSRF
@@ -121,5 +145,17 @@ public class AuthController {
                 .maxAge(refresh.ttl())
                 .build();
         return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, cookie.toString()).body(body);
+    }
+    // Те же атрибуты, что при выдаче: иначе браузер сочтёт это другой кукой и старую не сотрёт
+    private String clearedRefreshCookie()
+    {
+        return ResponseCookie.from(REFRESH_COOKIE, "")
+                .httpOnly(true)
+                .secure(secureCookie)
+                .sameSite("Strict")
+                .path("/auth")
+                .maxAge(0)
+                .build()
+                .toString();
     }
 }

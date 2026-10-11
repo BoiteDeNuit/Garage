@@ -6,9 +6,11 @@ import com.example.exception.ConflictException;
 import com.example.exception.EntityNotFoundException;
 import com.example.exception.InvalidRequestException;
 import com.example.model.AppUser;
+import com.example.model.RevokeReason;
 import com.example.model.Role;
 import com.example.repository.AppUserRepository;
 import com.example.repository.ListingRepository;
+import com.example.repository.RefreshTokenRepository;
 import com.example.security.AppUserPrincipal;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -27,12 +29,18 @@ import java.util.List;
 public class UserBanService {
     private final AppUserRepository users;
     private final ListingRepository listings;
+    private final RefreshTokenRepository refreshTokens;
     private final ApplicationEventPublisher events;
     private final Clock clock;
-    public UserBanService(AppUserRepository users, ListingRepository listings, ApplicationEventPublisher events, Clock clock)
+    public UserBanService(AppUserRepository users,
+                          ListingRepository listings,
+                          RefreshTokenRepository refreshTokens,
+                          ApplicationEventPublisher events,
+                          Clock clock)
     {
         this.users=users;
         this.listings=listings;
+        this.refreshTokens=refreshTokens;
         this.events=events;
         this.clock=clock;
     }
@@ -57,7 +65,10 @@ public class UserBanService {
         }
         Instant now = Instant.now(clock);
         user.ban(trimmed, now);
+        // Старые токены не оживут и после разблокировки: refresh погашены, версия access-токенов поднята
+        user.revokeTokens();
         List<Long> hidden = listings.hideAllOfSeller(user.getId(), admin.getId(), trimmed, now);
+        refreshTokens.revokeAllOfUser(user.getId(), RevokeReason.BAN, now);
         events.publishEvent(new ListingCardsChanged(hidden));
         return new UserBanDto(user.getUsername(), user.getBannedAt(), user.getBanReason(), hidden.size());
     }

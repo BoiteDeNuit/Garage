@@ -125,6 +125,46 @@ class RefreshTokenTest extends IntegrationTest {
                 .isEqualTo("BAN");
     }
 
+    // Выход гасит только этот вход: второй вход того же пользователя живёт. Старая кука после выхода — просто 401,
+    // а не повтор обменянного: семья второго входа не трогается
+    @Test
+    void logoutEndsOnlyThisSession() throws Exception
+    {
+        AppUser user = createUser(Role.USER, PASSWORD);
+        String laptop = refreshValue(login(user.getUsername(), PASSWORD).andReturn());
+        String phone = refreshValue(login(user.getUsername(), PASSWORD).andReturn());
+
+        String cleared = mockMvc.perform(post("/auth/logout").cookie(new Cookie("refresh_token", laptop)))
+                .andExpect(status().isNoContent())
+                .andReturn().getResponse().getHeader(HttpHeaders.SET_COOKIE);
+
+        assertThat(cleared).startsWith("refresh_token=;").contains("Max-Age=0", "Path=/auth", "HttpOnly");
+        refresh(laptop).andExpect(status().isUnauthorized());
+        refresh(phone).andExpect(status().isOk());
+        mockMvc.perform(post("/auth/logout")).andExpect(status().isNoContent());
+    }
+
+    // Выход отовсюду гасит и refresh всех входов, и уже выданные access-токены, хотя их срок не вышел
+    @Test
+    void logoutAllEndsEverySession() throws Exception
+    {
+        AppUser user = createUser(Role.USER, PASSWORD);
+        MvcResult laptop = login(user.getUsername(), PASSWORD).andReturn();
+        String phone = refreshValue(login(user.getUsername(), PASSWORD).andReturn());
+        String access = "Bearer " + objectMapper.readTree(laptop.getResponse().getContentAsString()).get("token").asString();
+
+        mockMvc.perform(post("/auth/logout-all").header("Authorization", access)).andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/me").header("Authorization", access))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Токен отозван, войдите заново"));
+        refresh(refreshValue(laptop)).andExpect(status().isUnauthorized());
+        refresh(phone).andExpect(status().isUnauthorized());
+        String fresh = objectMapper.readTree(login(user.getUsername(), PASSWORD).andReturn().getResponse().getContentAsString()).get("token").asString();
+        mockMvc.perform(get("/api/me").header("Authorization", "Bearer " + fresh)).andExpect(status().isOk());
+        mockMvc.perform(post("/auth/logout-all")).andExpect(status().isUnauthorized());
+    }
+
     private ResultActions refresh(String token) throws Exception
     {
         return mockMvc.perform(post("/auth/refresh").cookie(new Cookie("refresh_token", token)));

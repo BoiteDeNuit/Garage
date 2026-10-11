@@ -16,17 +16,19 @@ public class AppUserPrincipal implements UserDetails, CredentialsContainer {
     private String passwordHash;
     private final Role role;
     private final boolean banned;
+    private final int tokenVersion;
     public AppUserPrincipal(Long id, String username, String passwordHash, Role role)
     {
-        this(id, username, passwordHash, role, false);
+        this(id, username, passwordHash, role, false, 0);
     }
-    public AppUserPrincipal(Long id, String username, String passwordHash, Role role, boolean banned)
+    public AppUserPrincipal(Long id, String username, String passwordHash, Role role, boolean banned, int tokenVersion)
     {
         this.id=id;
         this.username=username;
         this.passwordHash=passwordHash;
         this.role=role;
         this.banned=banned;
+        this.tokenVersion=tokenVersion;
     }
     public Long getId()
     {
@@ -35,6 +37,10 @@ public class AppUserPrincipal implements UserDetails, CredentialsContainer {
     public Role getRole()
     {
         return role;
+    }
+    public int getTokenVersion()
+    {
+        return tokenVersion;
     }
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities()

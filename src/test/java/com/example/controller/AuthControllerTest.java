@@ -128,7 +128,7 @@ class AuthControllerTest {
     {
         when(rateLimiter.allow(anyString(), anyInt(), any())).thenReturn(true);
         String hash = new BCryptPasswordEncoder().encode("correct-horse-battery");
-        when(userDetailsService.loadUserByUsername("spammer")).thenAnswer(call -> new AppUserPrincipal(7L, "spammer", hash, Role.USER, true));
+        when(userDetailsService.loadUserByUsername("spammer")).thenAnswer(call -> new AppUserPrincipal(7L, "spammer", hash, Role.USER, true, 0));
 
         mockMvc.perform(post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)

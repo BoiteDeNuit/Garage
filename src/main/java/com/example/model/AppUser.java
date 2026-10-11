@@ -22,6 +22,7 @@ public class AppUser {
     private Role role;
     private Instant bannedAt;
     private String banReason;
+    private int tokenVersion;
     protected AppUser () {}
     public AppUser(String username, String passwordHash, Role role)
     {
@@ -50,6 +51,15 @@ public class AppUser {
     public boolean isBanned()
     {
         return bannedAt != null;
+    }
+    // Все выданные access-токены перестают действовать: в них записана прежняя версия
+    public void revokeTokens()
+    {
+        this.tokenVersion++;
+    }
+    public int getTokenVersion()
+    {
+        return tokenVersion;
     }
 
     public Long getId() {
