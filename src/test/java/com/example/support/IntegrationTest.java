@@ -76,6 +76,8 @@ public abstract class IntegrationTest {
     @DynamicPropertySource
     static void storage(DynamicPropertyRegistry registry)
     {
+        // Задачи по расписанию в тестах вызываются напрямую: по часам они удаляли бы данные посреди чужого теста
+        registry.add("scheduling.enabled", () -> "false");
         registry.add("storage.endpoint", () -> s3.getEndpoint().toString());
         registry.add("storage.public-endpoint", () -> s3.getEndpoint().toString());
         registry.add("storage.region", s3::getRegion);

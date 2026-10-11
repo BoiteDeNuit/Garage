@@ -16,6 +16,7 @@
 		<jjwt.version>0.12.6</jjwt.version>
 		<springdoc.version>3.1.1</springdoc.version>
 		<aws-sdk.version>2.54.20</aws-sdk.version>
+		<shedlock.version>7.10.1</shedlock.version>
 	</properties>
 	<!-- Версию AWS SDK Spring Boot не ведёт: свой BOM держит все модули SDK одной версии -->
 	<dependencyManagement>
@@ -169,6 +170,17 @@
 			<groupId>org.testcontainers</groupId>
 			<artifactId>testcontainers-localstack</artifactId>
 			<scope>test</scope>
+		</dependency>
+		<!-- Задача по расписанию проходит на одном экземпляре из нескольких: блокировка — строка в Postgres -->
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-spring</artifactId>
+			<version>${shedlock.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-provider-jdbc-template</artifactId>
+			<version>${shedlock.version}</version>
 		</dependency>
 	</dependencies>
 

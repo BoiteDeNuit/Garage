@@ -28,4 +28,11 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update RefreshToken t set t.revokedAt = :now, t.revokeReason = :reason where t.userId = :userId and t.revokedAt is null")
     int revokeAllOfUser(@Param("userId") Long userId, @Param("reason") RevokeReason reason, @Param("now") Instant now);
+
+    // Пачка истёкших для уборки (RefreshTokenCleanup). LIMIT в DELETE Postgres не умеет, поэтому через подзапрос по id.
+    // Строки, на которые ссылается replaced_by_id, тоже удаляются: ссылка станет NULL (ON DELETE SET NULL)
+    @Modifying
+    @Query(value = "delete from refresh_tokens where id in (select id from refresh_tokens where expires_at < :before order by id limit :batch)",
+            nativeQuery = true)
+    int deleteExpiredBatch(@Param("before") Instant before, @Param("batch") int batch);
 }

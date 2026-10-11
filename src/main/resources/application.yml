@@ -60,6 +60,12 @@ admin:
 jwt:
   secret: ${JWT_SECRET}
   ttl-minutes: 30
+cleanup:
+  # Сколько строк удаляет одна транзакция уборки
+  batch-size: 1000
+  refresh-tokens:
+    cron: "0 30 3 * * *"
+    keep-after-expiry: 7d
 auth:
   refresh:
     ttl: 14d
