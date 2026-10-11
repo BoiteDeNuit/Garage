@@ -1826,6 +1826,43 @@
           }
         },
         {
+          "name": "Цена по рынку",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));",
+                  "const market = pm.response.json();",
+                  "pm.test(\"оценка\", () => pm.expect([\"BELOW_MARKET\", \"IN_MARKET\", \"ABOVE_MARKET\", \"NOT_ENOUGH_DATA\"]).to.include(market.verdict));",
+                  "pm.test(\"цена объявления\", () => pm.expect(market.price).to.be.above(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/listings/{{listingId}}/market-price",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listings",
+                "{{listingId}}",
+                "market-price"
+              ]
+            },
+            "description": "Квартили цен той же марки, модели и года пересчитываются раз в час. На свежей базе похожих мало — NOT_ENOUGH_DATA"
+          }
+        },
+        {
           "name": "Цена в долларах",
           "event": [
             {

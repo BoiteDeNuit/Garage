@@ -30,6 +30,11 @@ public interface ListingRepository extends JpaRepository<Listing,Long>, JpaSpeci
     Double averageHorsePower(@Param("status") ListingStatus status);
     Optional<Listing> findFirstByStatusOrderByHorsePowerDesc(ListingStatus status);
 
+    // Оценка из market_prices (V33) по уникальному индексу. Марка и модель там в верхнем регистре
+    @Query(value = "select listings, p25, median, p75, calculated_at as calculatedAt from market_prices "
+            + "where brand = upper(:brand) and model = upper(:model) and year = :year", nativeQuery = true)
+    Optional<MarketPriceView> findMarketPrice(@Param("brand") String brand, @Param("model") String model, @Param("year") int year);
+
     // Очередь модерации: сначала те, что ждут дольше. idx_listings_review_queue (V22)
     Page<Listing> findByStatusOrderBySubmittedAtAscIdAsc(ListingStatus status, Pageable pageable);
 

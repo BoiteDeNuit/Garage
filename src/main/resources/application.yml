@@ -66,6 +66,8 @@ listings:
   expiry-cron: "0 10 * * * *"
   # Больше за один запуск не снимаем: см. ListingExpiry
   expiry-max-per-run: 10000
+market-prices:
+  refresh-cron: "0 40 * * * *"
 cleanup:
   # Сколько строк обрабатывает одна транзакция уборки
   batch-size: 1000
