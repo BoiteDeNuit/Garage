@@ -1,0 +1,43 @@
+name: Release
+
+# Образ для сервера собирается только после зелёного CI на push в main этого репозитория. Тег — sha коммита:
+# по нему разворачивают (deploy/rolling-update.sh <sha>) и по нему же откатываются на предыдущий.
+# workflow_run срабатывает и после CI на pull request, а branches сверяет только имя ветки: PR из форка
+# с веткой main прошёл бы фильтр, и чужой Dockerfile собрался бы с правом писать в реестр. Отсюда проверка
+# события и репозитория в if
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Метка source связывает пакет в реестре с репозиторием: доступ к образу наследуется от репозитория
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/boitedenuit/garage:${{ github.event.workflow_run.head_sha }}
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
