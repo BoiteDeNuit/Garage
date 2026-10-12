@@ -19,6 +19,9 @@ x-app: &app
     STORAGE_ENDPOINT: http://s3:4566
     STORAGE_PUBLIC_ENDPOINT: http://localhost:4566
   mem_limit: 768m
+  # Docker ждёт после SIGTERM 10 секунд и убивает. Приложению нужно больше: до 20 секунд на текущие запросы
+  # (профиль prod) и остановку слушателей Kafka и пула соединений
+  stop_grace_period: 30s
   healthcheck:
     test: ["CMD-SHELL", "wget -qO- localhost:8080/actuator/health | grep -q UP"]
     interval: 5s

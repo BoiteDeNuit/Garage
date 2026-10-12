@@ -1,6 +1,46 @@
+# Прод. Адрес базы, секреты и адреса сервисов — только из окружения (SPRING_DATASOURCE_URL и т. д.):
+# адрес из application.yml указывает на localhost и годится только для запуска с машины разработчика.
+# Swagger выключен: схема API — подсказка тому, кто ищет, что сломать. Из actuator наружу — health и prometheus,
+# health без подробностей: версии и адреса Postgres, Kafka и Redis никому снаружи знать не нужно.
+# Логи — JSON (ECS): их разбирает сборщик логов, а не человек в терминале
 spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5433/garage
   jpa:
     show-sql: false
-
+    properties:
+      hibernate:
+        format_sql: false
+  datasource:
+    hikari:
+      maximum-pool-size: 20
+      # Пул пуст дольше 3 секунд — ошибка сразу, а не очередь запросов на 30 секунд по умолчанию
+      connection-timeout: 3000
+  lifecycle:
+    # Остановка ждёт текущие запросы до 20 секунд: деплой не обрывает ответы на полпути.
+    # Docker по умолчанию убивает контейнер через 10 секунд, поэтому в compose stop_grace_period: 30s
+    timeout-per-shutdown-phase: 20s
+# Хранилище фото — только из окружения. Адрес по умолчанию (localhost:4566) и ключи test/test — для LocalStack
+# на машине разработчика: на сервере ссылки на загрузку подписались бы под localhost клиента. Нет переменной —
+# приложение не стартует (StorageProperties, @NotBlank), а не выдаёт нерабочие ссылки. Пустое значение по умолчанию —
+# чтобы отказ называл свойство: неразрешённый ${...} дошёл бы до SDK строкой и упал бы на разборе адреса
+storage:
+  endpoint: ${STORAGE_ENDPOINT:}
+  public-endpoint: ${STORAGE_PUBLIC_ENDPOINT:}
+  access-key: ${STORAGE_ACCESS_KEY:}
+  secret-key: ${STORAGE_SECRET_KEY:}
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      show-details: never
+logging:
+  structured:
+    format:
+      console: ecs
