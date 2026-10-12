@@ -158,10 +158,32 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
     mem_limit: 256m
     depends_on:
       - app
       - app2
+    restart: unless-stopped
+  # Дашборд «Тачкиоск» и источник Prometheus подключаются из файлов (grafana/provisioning) при старте.
+  # Смотреть можно без входа, менять — только админу (GRAFANA_ADMIN_PASSWORD)
+  grafana:
+    image: grafana/grafana:13.2.3
+    container_name: grafana
+    # Только с этой машины: пароль по умолчанию годится для ноутбука, а не для сети. На сервере — см. deploy/
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/tachkiosk.json
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    # Без нагрузки с дашбордом Grafana 13 занимает около 200 МБ
+    mem_limit: 512m
+    depends_on:
+      - prometheus
     restart: unless-stopped
 volumes:
   pgdata:

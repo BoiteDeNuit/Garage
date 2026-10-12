@@ -17,6 +17,7 @@ import org.springframework.kafka.listener.RetryListener;
 import org.springframework.util.backoff.FixedBackOff;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 // Что делать с сообщением, на котором слушатель упал. Без этого DefaultErrorHandler по умолчанию повторяет 10 раз
@@ -33,6 +34,12 @@ public class KafkaErrorConfig implements DisposableBean {
     public DefaultErrorHandler kafkaErrorHandler(KafkaTemplate<Object, Object> kafkaTemplate, MeterRegistry meterRegistry)
     {
         DefaultErrorHandler handler = new DefaultErrorHandler(deadLetters(kafkaTemplate), new FixedBackOff(1000L, 2));
+        // Счётчики DLT — сразу, с нулём. Созданный при первой потере счётчик появился бы в Prometheus уже с единицей,
+        // increase() по нему дал бы 0, и тревога KafkaDeadLetters пропустила бы первую потерю
+        for(String topic : List.of(KafkaTopicsConfig.LISTING_PUBLISHED, KafkaTopicsConfig.LISTING_PRICE_DROPPED))
+        {
+            meterRegistry.counter("kafka.dead.letters", "topic", topic);
+        }
         handler.setRetryListeners(new RetryListener() {
             @Override
             public void failedDelivery(ConsumerRecord<?, ?> record, Exception ex, int deliveryAttempt)

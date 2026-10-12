@@ -104,6 +104,12 @@ management:
     health:
       probes:
         enabled: true
+  # Границы гистограммы времени ответа для p95 в Grafana. Полная гистограмма (percentiles-histogram) — около
+  # 70 бакетов на каждую пару метод + URI + статус, а этих восьми хватает, чтобы видеть, укладываемся ли в SLO
+  metrics:
+    distribution:
+      slo:
+        http.server.requests: 50ms,100ms,250ms,500ms,1s,2s,5s
 rate-limit:
   login:
     per-minute: 5

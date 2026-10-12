@@ -4,6 +4,7 @@ import com.example.event.ListingPublishedEvent;
 import com.example.model.AppUser;
 import com.example.model.Role;
 import com.example.support.IntegrationTest;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -44,6 +45,18 @@ class DeadLetterTest extends IntegrationTest {
     private static final String DLT = "listing-published-dlt";
     @Autowired
     KafkaConnectionDetails kafkaConnection;
+    @Autowired
+    MeterRegistry meterRegistry;
+
+    // Счётчики DLT есть с нулём с самого старта: тревога на increase() иначе пропустила бы первую потерю
+    @Test
+    void deadLetterCountersExistBeforeFirstLoss()
+    {
+        for(String topic : List.of("listing-published", "listing-price-dropped"))
+        {
+            assertThat(meterRegistry.find("kafka.dead.letters").tag("topic", topic).counter()).isNotNull();
+        }
+    }
 
     // Не JSON: повтор не поможет, поэтому сразу в DLT с исходными байтами. Следующее нормальное событие обрабатывается
     @Test
