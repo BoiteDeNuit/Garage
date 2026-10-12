@@ -6,7 +6,7 @@ import com.example.dto.PhotoUploadDto;
 import com.example.dto.PhotoUploadRequest;
 import com.example.exception.EntityNotFoundException;
 import com.example.exception.InvalidRequestException;
-import com.example.exception.ListingStateException;
+import com.example.model.ListingStateException;
 import com.example.exception.PhotoStateException;
 import com.example.model.Listing;
 import com.example.model.ListingAction;

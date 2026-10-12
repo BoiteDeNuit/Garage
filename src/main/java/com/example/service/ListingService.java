@@ -14,7 +14,7 @@ import com.example.dto.ListingUpdateRequest;
 import com.example.event.ListingPriceDroppedEvent;
 import com.example.event.ListingPublishedEvent;
 import com.example.exception.EntityNotFoundException;
-import com.example.exception.ListingStateException;
+import com.example.model.ListingStateException;
 import com.example.model.Listing;
 import com.example.model.ListingAction;
 import com.example.model.ListingStatus;

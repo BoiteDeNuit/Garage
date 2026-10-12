@@ -1,6 +1,5 @@
 package com.example.model;
 
-import com.example.exception.ListingStateException;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.Instant;

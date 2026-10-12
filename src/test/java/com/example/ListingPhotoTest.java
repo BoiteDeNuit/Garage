@@ -1,7 +1,7 @@
 package com.example;
 
 import com.example.dto.ErrorResponse;
-import com.example.exception.GlobalExceptionHandler;
+import com.example.controller.GlobalExceptionHandler;
 import com.example.model.AppUser;
 import com.example.model.ListingPhoto;
 import com.example.model.ListingStatus;

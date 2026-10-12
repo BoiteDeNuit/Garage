@@ -1,6 +1,5 @@
-package com.example.exception;
+package com.example.model;
 
-import com.example.model.ListingStatus;
 
 // Конфликт с текущим состоянием объявления: переход запрещён или не хватает данных. Отдаётся как 409
 public class ListingStateException extends RuntimeException {

@@ -6,7 +6,7 @@ import com.example.dto.ModerationItemDto;
 import com.example.event.ListingPublishedEvent;
 import com.example.exception.EntityNotFoundException;
 import com.example.exception.InvalidRequestException;
-import com.example.exception.ListingStateException;
+import com.example.model.ListingStateException;
 import com.example.model.Listing;
 import com.example.model.ListingAction;
 import com.example.model.ListingStatus;

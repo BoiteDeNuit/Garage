@@ -11,7 +11,7 @@ import com.example.dto.ListingDto;
 import com.example.dto.ListingRequest;
 import com.example.dto.ListingUpdateRequest;
 import com.example.exception.EntityNotFoundException;
-import com.example.exception.ListingStateException;
+import com.example.model.ListingStateException;
 import com.example.model.Listing;
 import com.example.model.ListingStatus;
 import com.example.model.Role;

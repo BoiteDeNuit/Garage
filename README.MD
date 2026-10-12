@@ -550,7 +550,7 @@ POST /api/listings/{id}/photos
 ```
 
 Нужен запущенный Docker: часть тестов поднимает контейнеры через Testcontainers.
-533 теста: unit на Mockito, контроллер через `@WebMvcTest` с настоящей безопасностью, клиент ЦБ
+542 теста: правила архитектуры на ArchUnit, unit на Mockito, контроллер через `@WebMvcTest` с настоящей безопасностью, клиент ЦБ
 на встроенном `HttpServer`, репозитории и миграции на настоящем Postgres, полный контекст
 с Postgres, Kafka, Redis и S3 (LocalStack). Загрузка фото проверяется настоящим HTTP PUT в хранилище.
 Контейнеры полного контекста поднимаются один раз на весь прогон.
@@ -580,17 +580,25 @@ npx newman run postman/Tachkiosk.postman_collection.json \
 
 ```
 com.example
-├── controller   REST без логики
+├── controller   REST без логики и общий обработчик ошибок
 ├── service      бизнес-логика, транзакции, кэш, события
-├── repository   Spring Data JPA
-├── model        сущности
+├── job          задачи по расписанию под ShedLock
+├── repository   Spring Data JPA и нативные запросы Postgres
+├── model        сущности, статусы и исключение перехода статуса
 ├── dto          record и маппер
-├── exception    свои исключения и общий обработчик
-├── security     JWT фильтр и конфиг
+├── exception    исключения, которые обработчик превращает в коды ответа
+├── security     JWT-фильтр, конфиг, админ из окружения
 ├── client       клиент ЦБ
-├── storage      S3: клиент и presigned-ссылки
-├── config       Kafka, кэш, Swagger
-├── event        событие для Kafka
+├── storage      S3: presigned-ссылки, удаление файлов после коммита
+├── config       Kafka, кэш, расписание, Swagger
+├── event        события Spring и отправка в Kafka после коммита
 ├── listener     слушатели Kafka
 └── ratelimit    лимит входа на Redis
 ```
+
+Границы между пакетами проверяет `ArchitectureTest` (ArchUnit) по байткоду: контроллер не трогает репозитории
+и сущности и не открывает транзакций, сервис не знает о Kafka, SDK хранилища только в `storage`, запросы
+и ответы API — record, зависимости только через конструктор, циклов между пакетами нет. Правило про циклы
+при первом запуске нашло два: общий обработчик ошибок лежал в `exception` и зависел от `dto`, а `dto` бросает
+исключения из `exception`; исключение перехода статуса лежало в `exception` и зависело от `model`, а сущность
+из `model` его бросает. Обработчик переехал в `controller`, исключение — в `model`.

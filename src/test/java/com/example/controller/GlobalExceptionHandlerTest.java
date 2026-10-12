@@ -1,4 +1,4 @@
-package com.example.exception;
+package com.example.controller;
 
 import com.example.dto.ErrorResponse;
 import org.junit.jupiter.api.AfterEach;
