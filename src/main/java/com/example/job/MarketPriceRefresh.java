@@ -30,8 +30,25 @@ public class MarketPriceRefresh {
     @SchedulerLock(name = "marketPriceRefresh", lockAtMostFor = "PT30M", lockAtLeastFor = "PT1M")
     public void run()
     {
-        Boolean populated = jdbc.queryForObject("select relispopulated from pg_class where relname = 'market_prices'", Boolean.class);
-        String sql = Boolean.TRUE.equals(populated)
+        refresh(populated());
+    }
+    // Первый расчёт сразу после старта, а не в ближайшие :40: на свежей базе иначе час без оценок.
+    // Та же блокировка, что у run: два экземпляра стартуют вместе, считает один. Уже посчитано — ничего не делает
+    @SchedulerLock(name = "marketPriceRefresh", lockAtMostFor = "PT30M", lockAtLeastFor = "PT1M")
+    public void populateIfEmpty()
+    {
+        if(!populated())
+        {
+            refresh(false);
+        }
+    }
+    private boolean populated()
+    {
+        return Boolean.TRUE.equals(jdbc.queryForObject("select relispopulated from pg_class where relname = 'market_prices'", Boolean.class));
+    }
+    private void refresh(boolean populated)
+    {
+        String sql = populated
                 ? "refresh materialized view concurrently market_prices"
                 : "refresh materialized view market_prices";
         long started = System.nanoTime();

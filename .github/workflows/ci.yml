@@ -24,3 +24,25 @@ jobs:
         with:
           name: jacoco
           path: target/site/jacoco/
+
+  # Весь сценарий Postman против docker compose: два экземпляра за nginx, Postgres, Kafka, Redis, S3
+  api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Secrets for this run
+        run: |
+          cp .env.example .env
+          sed -i "s|^DB_PASSWORD=.*|DB_PASSWORD=$(openssl rand -hex 16)|" .env
+          sed -i "s|^JWT_SECRET=.*|JWT_SECRET=$(openssl rand -base64 48)|" .env
+          sed -i "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=$(openssl rand -hex 16)|" .env
+      - name: Start
+        run: docker compose -f docker-compose.yml -f ci/docker-compose.ci.yml up -d --build --wait cbr lb
+      - name: Postman
+        run: |
+          set -a; . ./.env; set +a
+          npx --yes newman@6.2.2 run postman/Tachkiosk.postman_collection.json \
+            --env-var adminUsername="$ADMIN_USERNAME" --env-var adminPassword="$ADMIN_PASSWORD"
+      - name: Logs
+        if: failure()
+        run: docker compose logs app app2 lb

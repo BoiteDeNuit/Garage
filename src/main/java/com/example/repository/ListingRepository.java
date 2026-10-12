@@ -30,6 +30,10 @@ public interface ListingRepository extends JpaRepository<Listing,Long>, JpaSpeci
     Double averageHorsePower(@Param("status") ListingStatus status);
     Optional<Listing> findFirstByStatusOrderByHorsePowerDesc(ListingStatus status);
 
+    // Посчитано ли представление. До первого REFRESH (оно создано WITH NO DATA) запрос к нему — ошибка, а не пустой ответ
+    @Query(value = "select relispopulated from pg_class where relname = 'market_prices'", nativeQuery = true)
+    Boolean marketPricesPopulated();
+
     // Оценка из market_prices (V33) по уникальному индексу. Марка и модель там в верхнем регистре
     @Query(value = "select listings, p25, median, p75, calculated_at as calculatedAt from market_prices "
             + "where brand = upper(:brand) and model = upper(:model) and year = :year", nativeQuery = true)

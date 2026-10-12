@@ -35,7 +35,11 @@ public class MarketPriceService {
         {
             throw EntityNotFoundException.listing(listingId);
         }
-        Optional<MarketPriceView> market = repository.findMarketPrice(card.brand(), card.model(), card.year());
+        // На свежей базе представление ещё не посчитано: запрос к нему упал бы с 500. Считает его MarketPriceRefresh
+        // при старте и раз в час, а до того оценки просто нет
+        Optional<MarketPriceView> market = Boolean.TRUE.equals(repository.marketPricesPopulated())
+                ? repository.findMarketPrice(card.brand(), card.model(), card.year())
+                : Optional.empty();
         if(market.isEmpty() || card.price() == null)
         {
             return new MarketPriceDto(listingId, card.price(), MarketVerdict.NOT_ENOUGH_DATA, null, null, null, null, null, null);

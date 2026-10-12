@@ -82,6 +82,37 @@ class MarketPriceTest extends IntegrationTest {
         mockMvc.perform(get("/api/listings/{id}/market-price", draft)).andExpect(status().isNotFound());
     }
 
+    // Свежая база: представление создано WITH NO DATA и ещё не посчитано. Оценки нет, но и 500 нет.
+    // Первый расчёт делает populateIfEmpty при старте приложения, а не ближайший запуск по расписанию
+    @Test
+    void unpopulatedViewGivesNoEstimateUntilFirstRefresh() throws Exception
+    {
+        AppUser seller = createUser(Role.USER);
+        String brand = uniqueBrand();
+        Long id = listing(seller, brand, ListingStatus.ACTIVE, 1_000_000);
+        for(int i = 0; i < 4; i++)
+        {
+            listing(seller, brand, ListingStatus.ACTIVE, 2_000_000);
+        }
+        jdbcTemplate.execute("refresh materialized view market_prices with no data");
+        try
+        {
+            mockMvc.perform(get("/api/listings/{id}/market-price", id))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.verdict").value("NOT_ENOUGH_DATA"));
+
+            marketPriceRefresh.populateIfEmpty();
+
+            mockMvc.perform(get("/api/listings/{id}/market-price", id))
+                    .andExpect(jsonPath("$.verdict").value("BELOW_MARKET"));
+        }
+        finally
+        {
+            releaseLocks();
+            marketPriceRefresh.run();
+        }
+    }
+
     private Long listing(AppUser seller, String brand, ListingStatus status, long price)
     {
         Long id = insertListing(seller, brand, status);

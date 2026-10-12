@@ -1,0 +1,13 @@
+# Поверх docker-compose.yml для прогона коллекции Postman в CI. Курс ЦБ — из файла: зеркало ЦБ снаружи
+# могло бы не ответить, и CI падал бы не из-за нашего кода. Пути — от корня проекта (каталог первого файла)
+services:
+  cbr:
+    image: nginx:1.29-alpine
+    volumes:
+      - ./ci/cbr:/usr/share/nginx/html:ro
+  app:
+    environment:
+      CURRENCY_API_URL: http://cbr/daily.json
+  app2:
+    environment:
+      CURRENCY_API_URL: http://cbr/daily.json
