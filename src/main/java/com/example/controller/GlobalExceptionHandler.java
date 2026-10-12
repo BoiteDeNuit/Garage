@@ -192,9 +192,9 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(TooManyRequestsException.class)
     public ResponseEntity<ErrorResponse> tooManyRequests(TooManyRequestsException e, HttpServletRequest request)
     {
-        ErrorResponse body = new ErrorResponse(LocalDateTime.now(),429,"Too many Requests","Слишком много попыток входа повторите через минуту", request.getRequestURI());
+        ErrorResponse body = new ErrorResponse(LocalDateTime.now(),429,"Too Many Requests",e.getMessage(), request.getRequestURI());
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                .header(HttpHeaders.RETRY_AFTER,"60")
+                .header(HttpHeaders.RETRY_AFTER,String.valueOf(e.getRetryAfterSeconds()))
                 .body(body);
     }
     // Query-параметр не превратился в свой тип (?yearFrom=abc, ?fuelType=COAL). Текст Spring по-английски

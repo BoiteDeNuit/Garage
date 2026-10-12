@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
@@ -38,6 +39,17 @@ public interface ListingRepository extends JpaRepository<Listing,Long>, JpaSpeci
     @Query(value = "select listings, p25, median, p75, calculated_at as calculatedAt from market_prices "
             + "where brand = upper(:brand) and model = upper(:model) and year = :year", nativeQuery = true)
     Optional<MarketPriceView> findMarketPrice(@Param("brand") String brand, @Param("model") String model, @Param("year") int year);
+
+    // Повтор своего же объявления для антиспама (ListingService.rejectDuplicate). Пробег может быть не указан:
+    // coalesce, иначе два объявления без пробега дублями бы не считались
+    @Query("select l.id from Listing l where l.seller.id = :sellerId and l.id <> :id and l.status in :statuses "
+            + "and upper(l.brand) = upper(:brand) and upper(l.model) = upper(:model) and l.year = :year "
+            + "and coalesce(l.mileageKm, -1) = coalesce(:mileage, -1) and l.price = :price and upper(l.city) = upper(:city) "
+            + "order by l.id")
+    List<Long> findDuplicates(@Param("sellerId") Long sellerId, @Param("id") Long id, @Param("statuses") Collection<ListingStatus> statuses,
+                              @Param("brand") String brand, @Param("model") String model, @Param("year") int year,
+                              @Param("mileage") Integer mileage, @Param("price") BigDecimal price, @Param("city") String city,
+                              Pageable pageable);
 
     // Очередь модерации: сначала те, что ждут дольше. idx_listings_review_queue (V22)
     Page<Listing> findByStatusOrderBySubmittedAtAscIdAsc(ListingStatus status, Pageable pageable);

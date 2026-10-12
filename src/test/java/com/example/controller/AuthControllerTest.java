@@ -6,6 +6,7 @@ import com.example.dto.UserDto;
 import com.example.exception.UsernameTakenException;
 import com.example.model.Role;
 import com.example.ratelimit.RateLimiter;
+import com.example.ratelimit.SpamGuard;
 import com.example.security.AppUserPrincipal;
 import com.example.security.JwtService;
 import com.example.security.SecurityConfig;
@@ -24,12 +25,14 @@ import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.ObjectMapper;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -50,6 +53,8 @@ class AuthControllerTest {
     RateLimiter rateLimiter;
     @MockitoBean
     RefreshTokenService refreshTokenService;
+    @MockitoBean
+    SpamGuard spamGuard;
 
     @Test
     void registerReturns201WithoutPassword() throws Exception
@@ -117,7 +122,9 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new LoginRequest("boss", "whatever"))))
                 .andExpect(status().isTooManyRequests())
-                .andExpect(jsonPath("$.message").value(containsString("Слишком много попыток")));
+                .andExpect(jsonPath("$.message").value(containsString("Слишком много попыток")))
+                // Секунды до следующего минутного окна, а не всегда 60
+                .andExpect(header().string("Retry-After", matchesPattern("[1-9]|[1-5][0-9]|60")));
 
         verify(rateLimiter).allow(argThat(key -> key.startsWith("rate:login:")), anyInt(), any());
     }

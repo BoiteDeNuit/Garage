@@ -21,6 +21,7 @@ import com.example.model.ListingStatus;
 import com.example.model.Role;
 import com.example.repository.AppUserRepository;
 import com.example.repository.ListingPhotoRepository;
+import com.example.ratelimit.SpamGuard;
 import com.example.repository.ListingRepository;
 import com.example.security.AppUserPrincipal;
 import com.example.storage.PhotoFilesRemoved;
@@ -78,6 +79,8 @@ class ListingServiceTest {
     private CurrencyClient currencyClient;
     @Mock
     private ApplicationEventPublisher events;
+    @Mock
+    private SpamGuard spamGuard;
     private final MeterRegistry registry = new SimpleMeterRegistry();
     private ListingService service;
 
@@ -86,7 +89,7 @@ class ListingServiceTest {
     void setUp()
     {
         ListingAccessPolicy policy = new ListingAccessPolicy();
-        service = new ListingService(repository, users, reader, new ListingLoader(repository, policy), photos, policy, catalog, history, moderation, currencyClient, events, registry, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new ListingService(repository, users, reader, new ListingLoader(repository, policy), photos, policy, catalog, history, moderation, currencyClient, events, spamGuard, registry, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test

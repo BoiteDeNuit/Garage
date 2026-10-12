@@ -10,6 +10,7 @@ import com.example.dto.UserDto;
 import com.example.exception.InvalidRefreshTokenException;
 import com.example.exception.TooManyRequestsException;
 import com.example.ratelimit.RateLimiter;
+import com.example.ratelimit.SpamGuard;
 import com.example.security.AppUserPrincipal;
 import com.example.security.JwtService;
 import com.example.service.AuthService;
@@ -50,6 +51,7 @@ public class AuthController {
     private static final String REFRESH_COOKIE = "refresh_token";
     private final AuthService authService;
     private final RefreshTokenService refreshTokens;
+    private final SpamGuard spamGuard;
     private final int loginLimit;
     private final boolean secureCookie;
     public AuthController(JwtService service,
@@ -57,6 +59,7 @@ public class AuthController {
                           RateLimiter rateLimiter,
                           AuthService authService,
                           RefreshTokenService refreshTokens,
+                          SpamGuard spamGuard,
                           @Value("${rate-limit.login.per-minute}") int loginLimit,
                           @Value("${auth.refresh.cookie-secure:true}") boolean secureCookie)
     {
@@ -65,6 +68,7 @@ public class AuthController {
         this.rateLimiter=rateLimiter;
         this.authService=authService;
         this.refreshTokens=refreshTokens;
+        this.spamGuard=spamGuard;
         this.loginLimit=loginLimit;
         this.secureCookie=secureCookie;
     }
@@ -72,10 +76,12 @@ public class AuthController {
     @ApiResponse(responseCode = "201", description = "Создан")
     @ApiResponse(responseCode = "400", description = "Логин или пароль не подходят")
     @ApiResponse(responseCode = "409", description = "Логин уже занят")
+    @ApiResponse(responseCode = "429", description = "Больше 10 регистраций в час с одного адреса")
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    public UserDto register(@Valid @RequestBody RegisterRequest request)
+    public UserDto register(@Valid @RequestBody RegisterRequest request, HttpServletRequest servletRequest)
     {
+        spamGuard.registration(servletRequest.getRemoteAddr());
         return authService.register(request);
     }
     @Operation(summary = "Получить токен")
@@ -85,10 +91,11 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest)
     {
-        String key = "rate:login:" + servletRequest.getRemoteAddr() + ":" +(Instant.now().getEpochSecond()/60);
+        long now = Instant.now().getEpochSecond();
+        String key = "rate:login:" + servletRequest.getRemoteAddr() + ":" + (now / 60);
         if(!rateLimiter.allow(key,loginLimit,Duration.ofSeconds(60)))
         {
-            throw new TooManyRequestsException("Слишком много попыток");
+            throw new TooManyRequestsException("Слишком много попыток входа, повторите через минуту", 60 - now % 60);
         }
         Authentication auth = authManager.authenticate(new UsernamePasswordAuthenticationToken(request.username(),request.password()));
         // Security 7 добавляет к ролям фактор входа FACTOR_PASSWORD, в токен он не нужен

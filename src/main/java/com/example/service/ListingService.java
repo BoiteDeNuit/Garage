@@ -18,6 +18,7 @@ import com.example.model.ListingStateException;
 import com.example.model.Listing;
 import com.example.model.ListingAction;
 import com.example.model.ListingStatus;
+import com.example.ratelimit.SpamGuard;
 import com.example.repository.AppUserRepository;
 import com.example.repository.ListingPhotoRepository;
 import com.example.repository.ListingRepository;
@@ -27,6 +28,7 @@ import com.example.storage.PhotoFilesRemoved;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.jspecify.annotations.Nullable;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
@@ -45,6 +47,7 @@ import java.util.List;
 
 @Service
 public class ListingService {
+    private static final List<ListingStatus> PUBLISHED_OR_PENDING = List.of(ListingStatus.ACTIVE, ListingStatus.PENDING_REVIEW);
     private static final Sort FEED_ORDER = Sort.by(Sort.Order.desc("publishedAt"), Sort.Order.desc("id"));
     private final ListingRepository repository;
     private final AppUserRepository users;
@@ -57,6 +60,7 @@ public class ListingService {
     private final ModerationSettings moderation;
     private final CurrencyClient currencyClient;
     private final ApplicationEventPublisher events;
+    private final SpamGuard spamGuard;
     private final Clock clock;
     private final Counter listingsCreated;
     public ListingService(ListingRepository repository,
@@ -70,6 +74,7 @@ public class ListingService {
                           ModerationSettings moderation,
                           CurrencyClient currencyClient,
                           ApplicationEventPublisher events,
+                          SpamGuard spamGuard,
                           MeterRegistry meterRegistry,
                           Clock clock)
     {
@@ -84,6 +89,7 @@ public class ListingService {
         this.moderation=moderation;
         this.currencyClient=currencyClient;
         this.events=events;
+        this.spamGuard=spamGuard;
         this.clock=clock;
         // Не listings.created: Prometheus-клиент считает _created служебным суффиксом счётчика и отрезает его
         this.listingsCreated=Counter.builder("listings.added")
@@ -94,6 +100,7 @@ public class ListingService {
     @Transactional
     public ListingDto create(ListingRequest request, AppUserPrincipal seller)
     {
+        spamGuard.listingCreated(seller.getId());
         Listing listing = Listing.draft(users.getReferenceById(seller.getId()), ListingMapper.toDetails(request), Instant.now(clock));
         Listing saved = repository.save(listing);
         history.record(saved, null, seller.getId(), null);
@@ -144,6 +151,8 @@ public class ListingService {
     public ListingDto publish(Long id, AppUserPrincipal actor)
     {
         Listing listing = loader.forChange(id, actor, ListingAction.PUBLISH);
+        spamGuard.listingPublished(actor.getId());
+        rejectDuplicate(listing);
         ListingStatus from = listing.getStatus();
         listing.publish(Instant.now(clock), moderation.required());
         // С модерацией в ленту, подсказки и Kafka объявление попадёт после одобрения, не сейчас
@@ -249,6 +258,19 @@ public class ListingService {
         BigDecimal rate = currencyClient.rateToRub(currency);
         BigDecimal convertedPrice = listing.getPrice().divide(rate,2, RoundingMode.HALF_UP);
         return new ListingPriceDto(listing.getId(),currency.toUpperCase(),rate,convertedPrice);
+    }
+    // Та же машина за ту же цену в том же городе у того же продавца уже в ленте или на проверке — это повтор,
+    // а не второе объявление: спам поднимает старое объявление в ленте новой публикацией.
+    // Проверка не атомарна: две одновременные публикации двух копий пройдут обе. Это защита от спама, а не инвариант
+    private void rejectDuplicate(Listing listing)
+    {
+        List<Long> duplicates = repository.findDuplicates(listing.getSeller().getId(), listing.getId(), PUBLISHED_OR_PENDING,
+                listing.getBrand(), listing.getModel(), listing.getYear(), listing.getMileageKm(), listing.getPrice(), listing.getCity(),
+                PageRequest.of(0, 1));
+        if(!duplicates.isEmpty())
+        {
+            throw ListingStateException.duplicate(duplicates.getFirst());
+        }
     }
     // Hibernate поднимает version только при flush: без него клиент получил бы старую версию
     private ListingDto toDtoWithNewVersion(Listing listing)

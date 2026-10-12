@@ -66,6 +66,10 @@
       "value": ""
     },
     {
+      "key": "copyId",
+      "value": ""
+    },
+    {
       "key": "archiveId",
       "value": ""
     },
@@ -903,6 +907,141 @@
                 "listings",
                 "{{listingId}}",
                 "publish"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Копия опубликованного",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"copyId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sellerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/listings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listings"
+              ]
+            },
+            "description": "Та же машина, цена и город, что у опубликованного объявления",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"brand\": \"Toyota\",\n  \"model\": \"Supra\",\n  \"engineCode\": \"2JZ\",\n  \"horsePower\": 320,\n  \"year\": 1998,\n  \"mileageKm\": 154000,\n  \"fuelType\": \"PETROL\",\n  \"transmission\": \"MANUAL\",\n  \"bodyType\": \"COUPE\",\n  \"price\": 4500000,\n  \"city\": \"Самара\",\n  \"description\": \"Небольшой пробег, один владелец\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Публикация копии — 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"ссылка на опубликованное\", () => pm.expect(pm.response.json().message).to.include(\"id \" + pm.collectionVariables.get(\"listingId\")));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sellerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/listings/{{copyId}}/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listings",
+                "{{copyId}}",
+                "publish"
+              ]
+            },
+            "description": "Антиспам: повтор своего объявления из ленты не публикуется, в ответе id опубликованного"
+          }
+        },
+        {
+          "name": "Удаление копии",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sellerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/listings/{{copyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listings",
+                "{{copyId}}"
               ]
             }
           }

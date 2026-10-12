@@ -51,6 +51,10 @@ public class ListingStateException extends RuntimeException {
     {
         return new ListingStateException("Сначала возьмите объявление в работу");
     }
+    public static ListingStateException duplicate(Long existingId)
+    {
+        return new ListingStateException("Такое же объявление уже опубликовано или на проверке: id " + existingId);
+    }
     public static ListingStateException tooManyPhotos(int max)
     {
         return new ListingStateException("Не больше " + max + " фото на объявление");
