@@ -18,6 +18,7 @@
 		<aws-sdk.version>2.54.20</aws-sdk.version>
 		<shedlock.version>7.10.1</shedlock.version>
 		<archunit.version>1.5.1</archunit.version>
+		<jacoco.version>0.8.15</jacoco.version>
 	</properties>
 	<!-- Версию AWS SDK Spring Boot не ведёт: свой BOM держит все модули SDK одной версии -->
 	<dependencyManagement>
@@ -197,6 +198,60 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<!-- Покрытие тестами: отчёт в target/site/jacoco/index.html. verify падает, если покрытие упало ниже порога.
+			     Порог чуть ниже текущего: новый код без тестов его опустит, а случайный разброс — нет.
+			     Метамодель Hibernate (Listing_ и др.) генерируется и в покрытие не входит -->
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>${jacoco.version}</version>
+				<configuration>
+					<excludes>
+						<exclude>**/*_.class</exclude>
+					</excludes>
+				</configuration>
+				<executions>
+					<execution>
+						<id>prepare-agent</id>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>report</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>report</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>check</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>check</goal>
+						</goals>
+						<configuration>
+							<rules>
+								<rule>
+									<element>BUNDLE</element>
+									<limits>
+										<limit>
+											<counter>LINE</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>0.93</minimum>
+										</limit>
+										<limit>
+											<counter>BRANCH</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>0.85</minimum>
+										</limit>
+									</limits>
+								</rule>
+							</rules>
+						</configuration>
+					</execution>
+				</executions>
 			</plugin>
 			<!-- Метамодель Listing_ для спецификаций поиска: опечатка в имени поля ловится при компиляции, а не в рантайме -->
 			<plugin>

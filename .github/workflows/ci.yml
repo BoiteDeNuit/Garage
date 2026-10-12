@@ -15,5 +15,12 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      # Тесты, ArchitectureTest и порог покрытия JaCoCo
       - name: Build and test
         run: ./mvnw -B verify
+      - name: Coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: jacoco
+          path: target/site/jacoco/
