@@ -1,0 +1,45 @@
+# Правила тревог. Alertmanager в compose нет: сработавшие правила видны на http://localhost:9090/alerts
+groups:
+  - name: tachkiosk
+    rules:
+      - alert: InstanceDown
+        expr: up{job="garage"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Экземпляр {{ $labels.instance }} не отвечает Prometheus больше минуты"
+      - alert: ServerErrors
+        expr: |
+          sum(rate(http_server_requests_seconds_count{job="garage", status=~"5.."}[5m]))
+            / sum(rate(http_server_requests_seconds_count{job="garage"}[5m])) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Больше 1% ответов — 5xx пять минут подряд"
+      - alert: KafkaDeadLetters
+        expr: increase(kafka_dead_letters_total[15m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Сообщения из {{ $labels.topic }} ушли в DLT после повторов: уведомления по ним не созданы"
+      - alert: EventsNotSent
+        expr: increase(listings_events_failed_total[15m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "События об объявлениях не ушли в Kafka: публикация прошла, уведомлений по ней не будет"
+      - alert: DbPoolExhausted
+        expr: max by (instance) (hikaricp_connections_pending{job="garage"}) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "На {{ $labels.instance }} запросы ждут соединение с базой дольше двух минут"
+      - alert: PhotoFilesNotDeleted
+        expr: increase(photos_files_delete_failed_total[1h]) > 0
+        labels:
+          severity: info
+        annotations:
+          summary: "Файлы фото не удалились из хранилища, их уберёт ночная уборка сирот"

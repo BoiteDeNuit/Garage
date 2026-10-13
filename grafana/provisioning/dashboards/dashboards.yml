@@ -1,0 +1,10 @@
+# Дашборды из файлов: правка в интерфейсе не сохранится, источник правды — JSON в репозитории
+apiVersion: 1
+providers:
+  - name: tachkiosk
+    folder: Тачкиоск
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards

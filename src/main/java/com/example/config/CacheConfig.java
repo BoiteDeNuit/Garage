@@ -3,20 +3,27 @@ package com.example.config;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.cache.autoconfigure.RedisCacheManagerBuilderCustomizer;
 import org.springframework.cache.Cache;
 import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
+import org.springframework.data.redis.cache.RedisCacheWriter;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import java.time.Duration;
 
+// Кэш-прокси снаружи транзакционного (у того LOWEST_PRECEDENCE): @CacheEvict срабатывает после коммита.
+// Если сбрасывать до коммита, любой GET между сбросом и коммитом положит в кэш старую строку.
+// Узкая гонка остаётся: GET прочитал до коммита, а положил в кэш после сброса. Её ограничивает TTL в 10 минут
 @Configuration
-@EnableCaching
+@EnableCaching(order = Ordered.LOWEST_PRECEDENCE - 1)
 public class CacheConfig implements CachingConfigurer {
     private static final Logger log = LoggerFactory.getLogger(CacheConfig.class);
     @Bean
@@ -33,6 +40,13 @@ public class CacheConfig implements CachingConfigurer {
         return RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(Duration.ofMinutes(10))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(serializer));
+    }
+    // Spring Data Redis 4 по умолчанию пишет в кэш асинхронно: ответ уходит раньше, чем Redis применил put или evict.
+    // Сразу после удаления можно было прочитать удалённую машину из кэша, а ошибки записи не доходили до errorHandler
+    @Bean
+    public RedisCacheManagerBuilderCustomizer immediateCacheWrites(RedisConnectionFactory connectionFactory)
+    {
+        return builder -> builder.cacheWriter(RedisCacheWriter.create(connectionFactory, writer -> writer.immediateWrites()));
     }
     @Override
     public CacheErrorHandler errorHandler() {

@@ -1,0 +1,59 @@
+# Сервер поверх docker-compose.yml: образ приложения из реестра (собирает workflow Release), профиль prod,
+# наружу — только nginx. Postgres, Kafka и Redis доступны только внутри сети Docker, Prometheus, Grafana
+# и kafka-ui — только с самого сервера (ssh -L). Фото — во внешнем S3: LocalStack без авторизации и с файлами
+# в памяти на сервер не годится, поэтому он здесь выключен.
+# Нужен Docker Compose 2.24.4+ (теги !reset и !override)
+#   APP_TAG=<sha коммита> docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml up -d
+# Обновление без простоя — deploy/rolling-update.sh
+x-prod-app: &prod-app
+  image: ghcr.io/boitedenuit/garage:${APP_TAG:?укажите APP_TAG — тег образа, sha коммита}
+  build: !reset null
+  environment:
+    SPRING_PROFILES_ACTIVE: prod
+    REFRESH_COOKIE_SECURE: "true"
+    # Без значений по умолчанию: ссылки на фото подписываются под публичный адрес хранилища,
+    # и адрес из локального compose (localhost:4566) у клиента никуда не ведёт
+    STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:?адрес S3 для приложения}
+    STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:?публичный https-адрес S3 для ссылок клиенту}
+    STORAGE_REGION: ${STORAGE_REGION:-us-east-1}
+    STORAGE_BUCKET: ${STORAGE_BUCKET:-tachkiosk-photos}
+    STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?ключ доступа к S3}
+    STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?секрет доступа к S3}
+  depends_on: !override
+    db:
+      condition: service_healthy
+    kafka:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  app:
+    <<: *prod-app
+  app2:
+    <<: *prod-app
+  # TLS снимает то, что стоит перед сервером (облачный балансировщик или certbot с nginx), сюда приходит http
+  lb:
+    ports: !override
+      - "80:80"
+  db:
+    ports: !reset []
+  kafka:
+    ports: !reset []
+  redis:
+    ports: !reset []
+  # Только чтобы попробовать надстройку на своей машине: docker compose --profile local-s3 ...
+  s3:
+    profiles: [local-s3]
+  prometheus:
+    ports: !override
+      - "127.0.0.1:9090:9090"
+  grafana:
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?задайте GRAFANA_ADMIN_PASSWORD}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+  # Только для разбора на месте: docker compose --profile tools up -d kafka-ui
+  kafka-ui:
+    profiles: [tools]
+    ports: !override
+      - "127.0.0.1:8090:8080"

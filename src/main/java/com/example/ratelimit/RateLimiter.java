@@ -22,7 +22,7 @@ public class RateLimiter {
             redis.expire(key, window);
             return count != null && count <= limit;
         } catch (DataAccessException e) {
-            log.warn("Redis Недоступен,ограничение попыток входа временно отключено: {}", e.getMessage());
+            log.warn("Redis недоступен, пределы частоты временно не действуют: {}", e.getMessage());
             return true;
         }
     }

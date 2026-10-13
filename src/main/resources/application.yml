@@ -6,11 +6,16 @@ spring:
       value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
       properties:
         max.block.ms: 5000
+    # ErrorHandlingDeserializer — обёртка над настоящими десериализаторами. Битое сообщение не роняет poll
+    # в бесконечный цикл на одном и том же offset, а доходит до обработчика ошибок как DeserializationException
+    # и уходит в DLT (KafkaErrorConfig)
     consumer:
-      key-deserializer: org.apache.kafka.common.serialization.LongDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
+      key-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       auto-offset-reset: earliest
       properties:
+        spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.LongDeserializer
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
         spring.json.trusted.packages: com.example.event
   data:
     redis:
@@ -22,8 +27,14 @@ spring:
         pageable:
           max-page-size: 100
           serialization-mode: via-dto
+  # Число вместо имени ("fuelType": 1) Jackson по умолчанию принимает как номер константы.
+  # Тогда порядок в enum стал бы частью API, а новое значение в середине списка тихо меняло бы смысл
+  jackson:
+    datatype:
+      enum:
+        fail-on-numbers-for-enums: true
   cache:
-    cache-names: cars
+    cache-names: listings
     redis:
       enable-statistics: true
   datasource:
@@ -31,6 +42,10 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+    # Блокировка Flyway в транзакции: CREATE INDEX CONCURRENTLY из V10 ждал бы конца этой транзакции и висел.
+    # Без неё Flyway берёт сессионную advisory-блокировку
+    postgresql:
+      transactional-lock: false
   jpa:
     open-in-view: false
     hibernate:
@@ -39,12 +54,42 @@ spring:
     properties:
       hibernate:
         format_sql: true
+# За nginx адрес запроса — адрес прокси, и лимит входов стал бы общим на всех. Tomcat (RemoteIpValve) берёт адрес
+# клиента из X-Forwarded-For, но только если запрос пришёл с внутреннего адреса (10.*, 172.16–31.*, 192.168.*, 127.*):
+# клиенту снаружи, который пришлёт заголовок сам, подменить адрес не выйдет
+server:
+  forward-headers-strategy: native
 admin:
   username: ${ADMIN_USERNAME}
   password: ${ADMIN_PASSWORD}
 jwt:
   secret: ${JWT_SECRET}
   ttl-minutes: 30
+listings:
+  # Сколько опубликованное висит в ленте, потом уходит в архив
+  publication-period: 60d
+  expiry-cron: "0 10 * * * *"
+  # Больше за один запуск не снимаем: см. ListingExpiry
+  expiry-max-per-run: 10000
+market-prices:
+  refresh-cron: "0 40 * * * *"
+cleanup:
+  # Сколько строк обрабатывает одна транзакция уборки
+  batch-size: 1000
+  refresh-tokens:
+    cron: "0 30 3 * * *"
+    keep-after-expiry: 7d
+  photo-uploads:
+    cron: "0 15 * * * *"
+    pending-ttl: 1d
+  photo-files:
+    cron: "0 0 4 * * *"
+    orphan-age: 1d
+auth:
+  refresh:
+    ttl: 14d
+    # Secure: браузер отдаёт куку только по HTTPS. Локально по http — REFRESH_COOKIE_SECURE=false
+    cookie-secure: ${REFRESH_COOKIE_SECURE:true}
 currency:
   api:
     url: ${CURRENCY_API_URL}
@@ -59,8 +104,30 @@ management:
     health:
       probes:
         enabled: true
+  # Границы гистограммы времени ответа для p95 в Grafana. Полная гистограмма (percentiles-histogram) — около
+  # 70 бакетов на каждую пару метод + URI + статус, а этих восьми хватает, чтобы видеть, укладываемся ли в SLO
+  metrics:
+    distribution:
+      slo:
+        http.server.requests: 50ms,100ms,250ms,500ms,1s,2s,5s
 rate-limit:
   login:
     per-minute: 5
+# true — публикация идёт через проверку модератором (PENDING_REVIEW), false — сразу в ленту
+moderation:
+  required: ${MODERATION_REQUIRED:false}
+  # Через сколько брошенное модератором объявление можно забрать другому
+  claim-ttl: 30m
+# S3-совместимое хранилище фото. Локально LocalStack из compose, в работе AWS S3 или любое совместимое.
+# endpoint — адрес для приложения, public-endpoint — для ссылок, которые уходят клиенту
+storage:
+  endpoint: ${STORAGE_ENDPOINT:http://localhost:4566}
+  public-endpoint: ${STORAGE_PUBLIC_ENDPOINT:http://localhost:4566}
+  region: ${STORAGE_REGION:us-east-1}
+  bucket: ${STORAGE_BUCKET:tachkiosk-photos}
+  access-key: ${STORAGE_ACCESS_KEY:test}
+  secret-key: ${STORAGE_SECRET_KEY:test}
+  upload-ttl: 10m
+  download-ttl: 1h
 springdoc:
   default-produces-media-type: application/json
